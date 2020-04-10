@@ -3,9 +3,12 @@
 # options(encoding = "ISO-8859-1")
 # getOption("encoding")
 # rm(list=ls())
-# getOption("OutDec")        # check what decimal point is and return "." or ","
+#install.packages("dplyr")
+#library(dplyr)
+getOption("OutDec")        # check what decimal point is and return "." or ","
 #install.packages("devtools")
 #devtools::install_github("Arcovan/Rstudio")
+
 ConvertAmount <- function(x) {
   TxtBedrag <- x
   TxtBedrag <- (sub(",", "d", TxtBedrag, fixed = TRUE))
@@ -30,9 +33,7 @@ Subtype <- function(x) {
 }
 options(OutDec = ",")        # set decimal point to ","
 ifile <- file.choose()       # Select Importfile
-if (grep(".pdf", ifile) < 0) {
-  stop("Please choose file with extension 'pdf'.\n")
-}
+if (grep(".pdf", ifile) < 0) {stop("Please choose file with extension 'pdf'.\n")}
 ofile <- sub("pdf","csv", ifile) #output file same name but different extension
 message("Input file: ", ifile, "\nOutput file: ", ofile)
 setwd(dirname(ifile))         # set working directory to input directory where file is
@@ -48,7 +49,7 @@ if (NROF_RawLines == 0) {
   fname<-sub(dirname(ifile),"File:.", ifile)
   stop("No characters found in ",fname," \nProbably only scanned images in PDF and not a native PDF.")
 }
-# add all elements of list (pages) to 1 vector for easy processing
+# add all elements of list (pages) to 1 vector for easy processing v
 page <- 1
 CCRaw <- PDFList[[page]]
 page <- page + 1
@@ -96,7 +97,7 @@ if (DocType=="ICS") {
   maand<-strftime(DatumAfschrift,"%m")
   CCAccount <-LineElements[4] 
   Afschriftnr <- LineElements[5] #currently not really used ; AFSCHRIFT is composed of YearMonth
-  message("DatumAfschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year)," Afschrift: ", Afschriftnr)
+  message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nAfschrift: ", Afschriftnr)
   message("Account:", CCAccount, " [",Subtype(CCRaw), "]")
   if (Subtype(CCRaw)=="BC") {    #Business Card
     CCLine <- grep("Card-nummer:", CCRaw)
@@ -113,6 +114,8 @@ if (DocType=="ICS") {
     message("Kaart:", CCnr[i])
   }
 } #Extract Date Document and other document header info 
+pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
+nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
 #create new empty Matrix
 mCreditCard <-
   matrix(data = "",
@@ -136,7 +139,8 @@ mBedrag <- matrix(data = 0,
                   ncol = 1)
 colnames(mBedrag) <- c("Bedrag")
 BedragDF <- data.frame(mBedrag) #convert matrix to data frame
-message("Start split ",DocType, "-document in 8 columns and: ", NROF_RawLines, " lines.\n")
+
+message("Start split ",DocType, "-document in 8 columns and: ", NROF_RawLines, " raw lines.\n")
 i <- 1
 if (DocType=="ICS") {
   while (i <= NROF_RawLines) {
@@ -194,7 +198,6 @@ if (DocType=="ING") {
     i <- i + 1
   }
 }
-View(mCreditCard)
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
 # Delete empty Lines
@@ -211,7 +214,8 @@ CreditCardDF$Valuta <- "EUR"
 # create Afschiftnummer
 CreditCardDF$AFSCHRIFT <- paste(year, maand, sep = "") # yyyymm bepaal volgnummer maand
 if (DocType=="ICS") {
-  CreditCardDF$IBAN <- CCnr[1] # should change per card now all have same creditcard number
+  # CreditCardDF$IBAN <- CCnr[1] # should change per card now all have same creditcard number
+  CreditCardDF$IBAN <- CCAccount # should change per card now all have same creditcard number
   if (Subtype(CCRaw)=="PC") {CreditCardDF$IBAN <- CCAccount}
 }
 if (DocType=="ING") {
@@ -232,9 +236,19 @@ CreditCardDF$Rentedatum <- gsub("mei", 'may', CreditCardDF$Rentedatum)
 CreditCardDF$Rentedatum <- gsub("okt", 'oct', CreditCardDF$Rentedatum)
 CreditCardDF$Rentedatum <- as.Date(CreditCardDF$Rentedatum, "%d %b %Y")
 CreditCardDF$Rentedatum <- format(CreditCardDF$Rentedatum, "%d-%m-%Y")
-View(CreditCardDF)
+# some magic to change the year of transaction that were in previous year compared to Date of statement since line do not have year indication
+if (as.numeric(maand)<=2) {
+  CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)])
+  CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)])
+} # statement jan or feb with possible lines from previous year
+if (as.numeric(maand)>=11) {
+  CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)]<-sub(year, nyear,CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)])
+  CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)])
+} # unlikely to have transactions later then statement date but just in case
+# end magic
 write.csv2(CreditCardDF, file = ofile, row.names = FALSE)         # Delimeter ; no row numbers
 source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R")
 message("Export klaar in file:", ofile)
 message("Totale uitgaven dit afschrift:", sum(CreditCardDF[CreditCardDF$Bedrag < 0, ]$Bedrag)) #sum only negatove amounts
+message("Total lines exported: ",nrow(CreditCardDF))
 message("Vorig geincasseerd saldo:", sum(CreditCardDF[CreditCardDF$Bedrag > 0, ]$Bedrag))
