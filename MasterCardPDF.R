@@ -1,23 +1,20 @@
-# This program converts creditcard statements to format to import in accounting system
-# PDF provided by CC-Company is converted to CSV
+# This program converts credit card statements to CSC-format to import into accounting system
+# PDF provided by CC-Company is cnonverted to CSV
 # options(encoding = "ISO-8859-1")
 # getOption("encoding")
-# rm(list=ls())
-#install.packages("dplyr")
-#library(dplyr)
-getOption("OutDec")        # check what decimal point is and return "." or ","
-#install.packages("devtools")
-#devtools::install_github("Arcovan/Rstudio")
 
+#install.packages("dplyr")
+# library(dplyr)
+# install.packages("devtools")
+# devtools::install_github("Arcovan/Rstudio")
 ConvertAmount <- function(x) {
   TxtBedrag <- x
   TxtBedrag <- (sub(",", "d", TxtBedrag, fixed = TRUE))
   TxtBedrag <- (sub(".", "t", TxtBedrag, fixed = TRUE))
   TxtBedrag <- (sub("d", ".", TxtBedrag, fixed = TRUE))
   TxtBedrag <- (sub("t", "", TxtBedrag, fixed = TRUE))
-  TxtBedrag <- as.numeric(TxtBedrag)
-  return(TxtBedrag)
-}
+  TxtBedrag <- as.numeric(TxtBedrag) # since txt string has format "##.###,##"
+} # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
   ProfileTXT<-c("Mastercard|International Card Services BV","Statement ING Corporate Card")
@@ -30,15 +27,25 @@ Subtype <- function(x) {
     Sub<-"BC"} # Business Card
   else { Sub<-"PC" } # Private Card
   return(Sub)
+} # for mastercard only can be business or personal
+
+# Select Import file ------------------------------------------------------
+ifile <- file.choose()
+if (grep(".pdf", ifile) < 0) {
+  stop("Please choose file with extension 'pdf'.\n")
+  }
+if (ifile == "") {
+  stop("Empty File name [ifile]\n")
 }
-options(OutDec = ",")        # set decimal point to ","
-ifile <- file.choose()       # Select Importfile
-if (grep(".pdf", ifile) < 0) {stop("Please choose file with extension 'pdf'.\n")}
-ofile <- sub("pdf","csv", ifile) #output file same name but different extension
+# ==== SET Environment ====
+getOption("OutDec")       #check what decimal point is and return "." or ","
+options(OutDec = ".")     #set decimal point to "."
+setwd(dirname(ifile))     #set working directory to input directory where file is
+ofile <- sub(".pdf","-YukiR.csv", ifile) #output file same name but different extension
 message("Input file: ", ifile, "\nOutput file: ", ofile)
-setwd(dirname(ifile))         # set working directory to input directory where file is
-message("Output file to directory: ", getwd(),"\n")
-# Start reading PDF -> PDFList
+message("Output file to directory: ", getwd())
+
+# Read PDF-> PDFList and validate -------------------
 PDFFILE <- pdftools::pdf_text(ifile) # read PDF and store in type Char
 PDFFILE <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFFILE, perl = TRUE) # strip double spaces
 PDFList <- strsplit(PDFFILE, split = "\n") #type list; page per entry
@@ -49,7 +56,9 @@ if (NROF_RawLines == 0) {
   fname<-sub(dirname(ifile),"File:.", ifile)
   stop("No characters found in ",fname," \nProbably only scanned images in PDF and not a native PDF.")
 }
-# add all elements of list (pages) to 1 vector for easy processing v
+CCRaw
+# Add pages to vector ---------------------------------------------------
+# ==== add all elements of list (pages) to 1 vector for easy processing v
 page <- 1
 CCRaw <- PDFList[[page]]
 page <- page + 1
@@ -57,9 +66,8 @@ while (page <= NrOfPages) {
   CCRaw <- append(CCRaw, PDFList[[page]]) #all seperate pages to 1 list plain raw PDF 
   page <- page + 1
 }
-View(CCRaw)
-# check document type (little too much evaluation but dont know case statement)
-DocType<-CheckDocType(CCRaw)  #doctype means which creditcard supplier
+# check document type (little too much evaluation but don't know case statement)
+DocType<-CheckDocType(CCRaw)  #doctype means which credit card supplier
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
   m<-c(1:length(ProfileTXT))  #defined in function CheckDoctype
@@ -86,7 +94,7 @@ if (DocType=="ING") {
 } #Extract Date Document and other document header info
 if (DocType=="ICS") {
 #Extract Date Document and other document header info 
-  #MasterCard ICS
+  #MasterCard ******   ICS (MasterCard) *******
   DateLineNR <- which(substr(CCRaw, 1, 9) == "Datum ICS")[1] + 1 # find line nr containing Document Date
   LineElements <- unlist(strsplit(CCRaw[DateLineNR], " ")) #split words in line in seperate elements
   year <- LineElements[3]
@@ -116,7 +124,7 @@ if (DocType=="ICS") {
 } #Extract Date Document and other document header info 
 pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
 nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
-#create new empty Matrix
+#create new empty Matrix mCreditCard
 mCreditCard <-
   matrix(data = "",
          nrow = NROF_RawLines,
@@ -125,7 +133,7 @@ colnames(mCreditCard) <-
   c(
     "IBAN",
     "Valuta",
-    "AFSCHRIFT",
+    "Afschrift",
     "Datum",
     "Rentedatum",
     "Tegenrekening",
@@ -139,7 +147,6 @@ mBedrag <- matrix(data = 0,
                   ncol = 1)
 colnames(mBedrag) <- c("Bedrag")
 BedragDF <- data.frame(mBedrag) #convert matrix to data frame
-
 message("Start split ",DocType, "-document in 8 columns and: ", NROF_RawLines, " raw lines.\n")
 i <- 1
 if (DocType=="ICS") {
@@ -198,6 +205,14 @@ if (DocType=="ING") {
     i <- i + 1
   }
 }
+if (DocType=="ICS"){
+  message("Card: ",CCnr[1],"/",CCLine[1],"/","/TOT:",NROF_RawLines)
+  mCreditCard[(CCLine[1]+1):(CCLine[2]-1),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(CCLine[1]+1):(CCLine[2]-1),"Omschrijving"])
+  if (length(CCnr)>1){
+    message("Card: ",CCnr[2],"/",CCLine[2],"/","/TOT:",NROF_RawLines)
+    mCreditCard[(CCLine[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(CCLine[2]+1):(NROF_RawLines),"Omschrijving"])
+  }
+}
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
 # Delete empty Lines
@@ -212,7 +227,7 @@ if (length(which(CreditCardDF$Omschrijving == "")) != 0) {
 #
 CreditCardDF$Valuta <- "EUR"
 # create Afschiftnummer
-CreditCardDF$AFSCHRIFT <- paste(year, maand, sep = "") # yyyymm bepaal volgnummer maand
+CreditCardDF$Afschrift <- paste(year, maand, sep = "") # yyyymm bepaal volgnummer maand
 if (DocType=="ICS") {
   # CreditCardDF$IBAN <- CCnr[1] # should change per card now all have same creditcard number
   CreditCardDF$IBAN <- CCAccount # should change per card now all have same creditcard number
@@ -246,9 +261,41 @@ if (as.numeric(maand)>=11) {
   CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)])
 } # unlikely to have transactions later then statement date but just in case
 # end magic
-write.csv2(CreditCardDF, file = ofile, row.names = FALSE)         # Delimeter ; no row numbers
+View(CreditCardDF)
+summary(CreditCardDF$Bedrag)
+#write.csv2(CreditCardDF, file = ofile, row.names = FALSE)         # Delimeter ; no row numbers
+write.table(
+  CreditCardDF,
+  file = ofile,   #Output file define at start
+  quote = FALSE,
+  sep = ";",
+  dec = ".",
+  row.names = FALSE,
+  #col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
+)
+address<-as.data.frame(CreditCardDF$`Naam tegenrekening`)
+write.table(address, file = "address.txt", append = TRUE,
+            row.names = FALSE, col.names = FALSE)
 source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R")
 message("Export klaar in file:", ofile)
 message("Totale uitgaven dit afschrift:", sum(CreditCardDF[CreditCardDF$Bedrag < 0, ]$Bedrag)) #sum only negatove amounts
 message("Total lines exported: ",nrow(CreditCardDF))
 message("Vorig geincasseerd saldo:", sum(CreditCardDF[CreditCardDF$Bedrag > 0, ]$Bedrag))
+# compositie regular expression
+#(?:^           # beginning of string
+#     \d{1,3}      # one, two, or three digits
+#   (?:
+#       \.?        # optional separating period
+#       \d{3}      # followed by exactly three digits
+#   )*           # repeat this subpattern (.###) any number of times (including none at all)
+#     (?:,\d{2})?  # optionally followed by a decimal comma and exactly two digits
+#     $)             # End of string.
+# |              # ...or...
+#   (?:^           # beginning of string
+#      \d{1,3}      # one, two, or three digits
+#    (?:
+#        ,?         # optional separating comma
+#        \d{3}      # followed by exactly three digits
+#    )*           # repeat this subpattern (,###) any number of times (including none at all)
+#      (?:\.\d{2})? # optionally followed by a decimal perioda and exactly two digits
+#      $)             # End of string.
