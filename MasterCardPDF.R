@@ -1,9 +1,9 @@
-# This program converts credit card statements to CSC-format to import into accounting system
-# PDF provided by CC-Company is cnonverted to CSV
+# This program converts credit card statements to CSV-format to import into accounting system
+# PDF provided by CC-Company is converted to CSV
 # options(encoding = "ISO-8859-1")
 # getOption("encoding")
 
-#install.packages("dplyr")
+# install.packages("dplyr")
 # library(dplyr)
 # install.packages("devtools")
 # devtools::install_github("Arcovan/Rstudio")
@@ -56,7 +56,6 @@ if (NROF_RawLines == 0) {
   fname<-sub(dirname(ifile),"File:.", ifile)
   stop("No characters found in ",fname," \nProbably only scanned images in PDF and not a native PDF.")
 }
-CCRaw
 # Add pages to vector ---------------------------------------------------
 # ==== add all elements of list (pages) to 1 vector for easy processing v
 page <- 1
@@ -229,7 +228,7 @@ CreditCardDF$Valuta <- "EUR"
 # create Afschiftnummer
 CreditCardDF$Afschrift <- paste(year, maand, sep = "") # yyyymm bepaal volgnummer maand
 if (DocType=="ICS") {
-  # CreditCardDF$IBAN <- CCnr[1] # should change per card now all have same creditcard number
+  CreditCardDF$`Naam tegenrekening`<-gsub("GEINCASSEERD VORIG S",'MasterCard',CreditCardDF$`Naam tegenrekening`)
   CreditCardDF$IBAN <- CCAccount # should change per card now all have same creditcard number
   if (Subtype(CCRaw)=="PC") {CreditCardDF$IBAN <- CCAccount}
 }
