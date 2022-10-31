@@ -102,21 +102,23 @@ if (DocType=="ICS") {
   DatumAfschrift <- paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year) # dd mmm yyyy
   DatumAfschrift <-as.Date(DatumAfschrift,"%d %b %Y") # DOES NOT WORK WITH DUTCH  DATES
   maand<-strftime(DatumAfschrift,"%m")
-  CCAccount <-LineElements[4] 
+  CCAccount <-LineElements[4]     # Hard coded, could be better..
   Afschriftnr <- LineElements[5] #currently not really used ; AFSCHRIFT is composed of YearMonth
-  message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nAfschrift: ", Afschriftnr)
+  message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nAfschriftnr: ", Afschriftnr)
   message("Account:", CCAccount, " [",Subtype(CCRaw), "]")
+# Define credit card number and store in Card4DigitsLineNR ---------------------------
+# sometimes multiple cards are reported on 1 PDF and identified by 4 digits
   if (Subtype(CCRaw)=="BC") {    #Business Card
-    CCLine <- grep("Card-nummer:", CCRaw)
+    Card4DigitsLineNR <- grep("Card-nummer:", CCRaw)
   }
   if (Subtype(CCRaw)=="PC") {  #Private Card
-    CCLine <-grep("Uw Card met als laatste vier cijfers", CCRaw)   # NB if more cards on 1 statement statement is NOT split
+    Card4DigitsLineNR <-grep("Uw Card met als laatste vier cijfers", CCRaw)   # NB if more cards on 1 statement statement is NOT split
   }
-  if (length(c(CCLine))>1){message("Multiple Cards:")}
+  if (length(c(Card4DigitsLineNR))>1){message("Multiple Cards:")}
   CCnr<-vector()
-  m<-c(1:length(CCLine))
+  m<-c(1:length(Card4DigitsLineNR))
   for (i in m) {
-    LineElements <- unlist(strsplit(CCRaw[CCLine[i]], " ")) #re-use same variable LineElements for other line
+    LineElements <- unlist(strsplit(CCRaw[Card4DigitsLineNR[i]], " ")) #re-use same variable LineElements for other line
     CCnr<-c(CCnr,LineElements[which(regexpr("\\d{4}",LineElements)>0)[1]]) # credit Card number ****dddd
     message("Kaart:", CCnr[i])
   }
@@ -205,13 +207,16 @@ if (DocType=="ING") {
   }
 }
 if (DocType=="ICS"){
-  message("Card: ",CCnr[1],"/",CCLine[1],"/","/TOT:",NROF_RawLines)
-  mCreditCard[(CCLine[1]+1):(CCLine[2]-1),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(CCLine[1]+1):(CCLine[2]-1),"Omschrijving"])
-  if (length(CCnr)>1){
-    message("Card: ",CCnr[2],"/",CCLine[2],"/","/TOT:",NROF_RawLines)
-    mCreditCard[(CCLine[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(CCLine[2]+1):(NROF_RawLines),"Omschrijving"])
+  if (length(CCnr)==1){
+    message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
+    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"])
+  } else {
+    if (length(CCnr)>1){
+      message("Card: ",CCnr[2],"/",Card4DigitsLineNR[2],"/","/TOT:",NROF_RawLines)
+      mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"])
+    }
   }
-}
+} # Add credit card 4 digitnumber to lines
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
 # Delete empty Lines
@@ -298,3 +303,4 @@ message("Vorig geincasseerd saldo:", sum(CreditCardDF[CreditCardDF$Bedrag > 0, ]
 #    )*           # repeat this subpattern (,###) any number of times (including none at all)
 #      (?:\.\d{2})? # optionally followed by a decimal perioda and exactly two digits
 #      $)             # End of string.
+
