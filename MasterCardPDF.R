@@ -1,7 +1,6 @@
 # This program converts credit card statements to CSV-format to import into accounting system
 # PDF provided by CC-Company is converted to CSV
 # options(encoding = "ISO-8859-1")
-# getOption("encoding")
 
 # install.packages("dplyr")
 # library(dplyr)
@@ -178,10 +177,19 @@ if (DocType=="ICS") {
         }
         mCreditCard[i, "Naam tegenrekening"] <- substr(CCRegel, 1, PosBedrag - 6) #Column 7
       }
-      mCreditCard[i, "Omschrijving"] <- CCRegel #after all stripping Description is left
+      mCreditCard[i, "Omschrijving"] <- substr(CCRegel,1, PosBedrag-2) #after all stripping Description is left
     }
     i <- i + 1
   }
+  if (length(CCnr)==1){
+    message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
+    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"])
+  } else {
+    if (length(CCnr)>1){
+      message("Card: ",CCnr[2],"/",Card4DigitsLineNR[2],"/","/TOT:",NROF_RawLines)
+      mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"])
+    }
+  } # Add credit card 4 digitnumber to lines
 }
 if (DocType=="ING") {
   while (i <= NROF_RawLines) {
@@ -206,17 +214,6 @@ if (DocType=="ING") {
     i <- i + 1
   }
 }
-if (DocType=="ICS"){
-  if (length(CCnr)==1){
-    message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
-    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"])
-  } else {
-    if (length(CCnr)>1){
-      message("Card: ",CCnr[2],"/",Card4DigitsLineNR[2],"/","/TOT:",NROF_RawLines)
-      mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"])
-    }
-  }
-} # Add credit card 4 digitnumber to lines
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
 # Delete empty Lines
