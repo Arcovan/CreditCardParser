@@ -30,7 +30,7 @@ Subtype <- function(x) {
 
 # Select Import file ------------------------------------------------------
 ifile <- file.choose()
-if (grep(".pdf", ifile) < 0) {
+if (!(grepl(".pdf",ifile))) {     # Grepl = grep logical
   stop("Please choose file with extension 'pdf'.\n")
   }
 if (ifile == "") {
