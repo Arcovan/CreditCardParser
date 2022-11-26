@@ -32,31 +32,31 @@ Subtype <- function(x) {
 ifile <- file.choose()
 if (!(grepl(".pdf",ifile))) {     # Grepl = grep logical
   stop("Please choose file with extension 'pdf'.\n")
-  }
+}
 if (ifile == "") {
   stop("Empty File name [ifile]\n")
 }
-# ==== SET Environment ====
-getOption("OutDec")       #check what decimal point is and return "." or ","
-options(OutDec = ".")     #set decimal point to "."
+ofile <- sub(".pdf","-PYukiR.csv", ifile) #output file same name but different extension
 setwd(dirname(ifile))     #set working directory to input directory where file is
-ofile <- sub(".pdf","-YukiR.csv", ifile) #output file same name but different extension
-message("Input file: ", ifile, "\nOutput file: ", ofile)
+message("Input file: ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
 message("Output file to directory: ", getwd())
 
+# ==== SET Environment ====
+options(OutDec = ".")     #set decimal point to "."
+
 # Read PDF-> PDFList and validate -------------------
-PDFFILE <- pdftools::pdf_text(ifile) # read PDF and store in type Char
-PDFFILE <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFFILE, perl = TRUE) # strip double spaces
-PDFList <- strsplit(PDFFILE, split = "\n") #type list; page per entry
-NrOfPages <- length(PDFList) # number of objects in list = nr of pages in PDF
+PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Char
+PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces
+NrOfPages <- length(PDFRaw)             # number of objects in list = nr of pages in PDF
+PDFList <- strsplit(PDFRaw, split = "\n") #type list; page per entry
 NROF_RawLines <- sum(lengths(PDFList))
 message("Number of lines read: ", NROF_RawLines, " from " , NrOfPages , " page(s).")
 if (NROF_RawLines == 0) {
-  fname<-sub(dirname(ifile),"File:.", ifile)
-  stop("No characters found in ",fname," \nProbably only scanned images in PDF and not a native PDF.")
+  stop("No characters found in ",basename(ifile)," \nProbably only scanned images in PDF and not a native PDF.")
 }
 # Add pages to vector ---------------------------------------------------
-# ==== add all elements of list (pages) to 1 vector for easy processing v
+# ==== add all elements of list (pages) to 1 vector for easy processing 
+# CCRaw contains full PDF line per line in txt format Every line is an item in the list
 page <- 1
 CCRaw <- PDFList[[page]]
 page <- page + 1
@@ -64,7 +64,8 @@ while (page <= NrOfPages) {
   CCRaw <- append(CCRaw, PDFList[[page]]) #all seperate pages to 1 list plain raw PDF 
   page <- page + 1
 }
-# check document type (little too much evaluation but don't know case statement)
+
+# # check document type (little too much evaluation but don't know --------
 DocType<-CheckDocType(CCRaw)  #doctype means which credit card supplier
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
@@ -75,23 +76,23 @@ if (DocType=="UNKNOWN"){
   stop("Documenttype is not recognised. (No ING and no ICS)")
 } 
 if (DocType=="ING") { 
-    message("ING AFSCHRIFT Recognised in English language.\n")
-    DateLineNR<-which(regexpr("\\d{2}\\-\\d{2}-\\d{4}", CCRaw, perl = TRUE)>0)[1]
-    LineElements <- unlist(strsplit(CCRaw[DateLineNR], " "))
-    DatumAfschrift <-as.Date(LineElements[1],"%d-%m-%Y")
-    maand<-strftime(DatumAfschrift,"%m")
-    year<-strftime(DatumAfschrift,"%Y")
-    Afschriftnr <- LineElements[5]
-    PaymentLineNR<-which(regexpr("Payments", CCRaw, perl = TRUE)>0)[1]
-    LineElements <- unlist(strsplit(CCRaw[PaymentLineNR], " "))
-    Payment<-ConvertAmount(paste(LineElements[4]))
-    AccountLineNR<-which(regexpr("Account number", CCRaw, perl = TRUE)>0)[1]+2
-    LineElements <- unlist(strsplit(CCRaw[AccountLineNR], " "))
-    CCAccount<-LineElements[length(LineElements)-2]
-    message("CreditCard Account:", CCAccount, " DatumAfschrift: ", LineElements[1]," Afschrift: ", Afschriftnr)
+  message("ING AFSCHRIFT Recognised in English language.\n")
+  DateLineNR<-which(regexpr("\\d{2}\\-\\d{2}-\\d{4}", CCRaw, perl = TRUE)>0)[1]
+  LineElements <- unlist(strsplit(CCRaw[DateLineNR], " "))
+  DatumAfschrift <-as.Date(LineElements[1],"%d-%m-%Y")
+  maand<-strftime(DatumAfschrift,"%m")
+  year<-strftime(DatumAfschrift,"%Y")
+  Afschriftnr <- LineElements[5]
+  PaymentLineNR<-which(regexpr("Payments", CCRaw, perl = TRUE)>0)[1]
+  LineElements <- unlist(strsplit(CCRaw[PaymentLineNR], " "))
+  Payment<-ConvertAmount(paste(LineElements[4]))
+  AccountLineNR<-which(regexpr("Account number", CCRaw, perl = TRUE)>0)[1]+2
+  LineElements <- unlist(strsplit(CCRaw[AccountLineNR], " "))
+  CCAccount<-LineElements[length(LineElements)-2]
+  message("CreditCard Account:", CCAccount, " DatumAfschrift: ", LineElements[1]," Afschrift: ", Afschriftnr)
 } #Extract Date Document and other document header info
 if (DocType=="ICS") {
-#Extract Date Document and other document header info 
+  #Extract Date Document and other document header info 
   #MasterCard ******   ICS (MasterCard) *******
   DateLineNR <- which(substr(CCRaw, 1, 9) == "Datum ICS")[1] + 1 # find line nr containing Document Date
   LineElements <- unlist(strsplit(CCRaw[DateLineNR], " ")) #split words in line in seperate elements
@@ -101,12 +102,12 @@ if (DocType=="ICS") {
   DatumAfschrift <- paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year) # dd mmm yyyy
   DatumAfschrift <-as.Date(DatumAfschrift,"%d %b %Y") # DOES NOT WORK WITH DUTCH  DATES
   maand<-strftime(DatumAfschrift,"%m")
-  CCAccount <-LineElements[4]     # Hard coded, could be better..
-  Afschriftnr <- LineElements[5] #currently not really used ; AFSCHRIFT is composed of YearMonth
-  message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nAfschriftnr: ", Afschriftnr)
+  CCAccount <-LineElements[4]     # Hard coded, could be better.. ICS Klantnummer
+  Afschriftnr <- LineElements[5]  # currently not really used ; AFSCHRIFT is composed of YearMonthmont.
+  message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nVolgnummer: ", Afschriftnr)
   message("Account:", CCAccount, " [",Subtype(CCRaw), "]")
-# Define credit card number and store in Card4DigitsLineNR ---------------------------
-# sometimes multiple cards are reported on 1 PDF and identified by 4 digits
+  # Define 4 digit credit card number and store in Card4DigitsLineNR ---------------------------
+  # sometimes multiple cards are reported on 1 PDF and identified by 4 digits
   if (Subtype(CCRaw)=="BC") {    #Business Card
     Card4DigitsLineNR <- grep("Card-nummer:", CCRaw)
   }
@@ -114,7 +115,7 @@ if (DocType=="ICS") {
     Card4DigitsLineNR <-grep("Uw Card met als laatste vier cijfers", CCRaw)   # NB if more cards on 1 statement statement is NOT split
   }
   if (length(c(Card4DigitsLineNR))>1){message("Multiple Cards:")}
-  CCnr<-vector()
+  CCnr<-vector()   #define as vector
   m<-c(1:length(Card4DigitsLineNR))
   for (i in m) {
     LineElements <- unlist(strsplit(CCRaw[Card4DigitsLineNR[i]], " ")) #re-use same variable LineElements for other line
@@ -160,6 +161,7 @@ if (DocType=="ICS") {
       #does not work properly with multiple instances of debet etc
       CCRegel <- substr(CCRegel, 1, PosBIJAF - 2) #strip BIJ/AF from text aan einde van regel
       DATSTART <- regexpr("\\d{2}\\s...\\s\\d{2}", CCRegel)[1] #search where (and if) date starts dd mmm dd
+      message("i:",i," BA:",BIJAF,"/",PosBIJAF,"==Datumpositie:",DATSTART)
       if (DATSTART >= 0) {
         mCreditCard[i, "Datum"] <- paste(substr(CCRegel, DATSTART, 6), year) # dd mmm yyyy Column 4 Datum take part from line and add Year
         CCRegel <- substr(CCRegel, 8, nchar(CCRegel)) #strip datum
@@ -176,20 +178,23 @@ if (DocType=="ICS") {
           BedragDF$Bedrag[i] <- ConvertAmount(paste(sBedrag))
         }
         mCreditCard[i, "Naam tegenrekening"] <- substr(CCRegel, 1, PosBedrag - 6) #Column 7
+        mCreditCard[i, "Omschrijving"] <- substr(CCRegel,1, PosBedrag-2) #after all stripping Description is left
       }
-      mCreditCard[i, "Omschrijving"] <- substr(CCRegel,1, PosBedrag-2) #after all stripping Description is left
     }
     i <- i + 1
   }
+
   if (length(CCnr)==1){
     message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
     mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"])
   } else {
     if (length(CCnr)>1){
-      message("Card: ",CCnr[2],"/",Card4DigitsLineNR[2],"/","/TOT:",NROF_RawLines)
+      message("Cards: ",CCnr[1],"/Van:",Card4DigitsLineNR[1]+1," TOT:",Card4DigitsLineNR[2]-1)
+      mCreditCard[(Card4DigitsLineNR[1]+1):(Card4DigitsLineNR[2]-1),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(Card4DigitsLineNR[2]-1),"Omschrijving"])
+      message("Cards: ",CCnr[2],"/Van:",Card4DigitsLineNR[2]," TOT:",NROF_RawLines)
       mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[2],":",mCreditCard[(Card4DigitsLineNR[2]+1):(NROF_RawLines),"Omschrijving"])
     }
-  } # Add credit card 4 digitnumber to lines
+  } # Add credit card 4 digit number to lines
 }
 if (DocType=="ING") {
   while (i <= NROF_RawLines) {
@@ -277,11 +282,7 @@ write.table(
 address<-as.data.frame(CreditCardDF$`Naam tegenrekening`)
 write.table(address, file = "address.txt", append = TRUE,
             row.names = FALSE, col.names = FALSE)
-source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R")
-message("Export klaar in file:", ofile)
-message("Totale uitgaven dit afschrift:", sum(CreditCardDF[CreditCardDF$Bedrag < 0, ]$Bedrag)) #sum only negatove amounts
-message("Total lines exported: ",nrow(CreditCardDF))
-message("Vorig geincasseerd saldo:", sum(CreditCardDF[CreditCardDF$Bedrag > 0, ]$Bedrag))
+source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R") # print summary
 # compositie regular expression
 #(?:^           # beginning of string
 #     \d{1,3}      # one, two, or three digits
@@ -300,4 +301,3 @@ message("Vorig geincasseerd saldo:", sum(CreditCardDF[CreditCardDF$Bedrag > 0, ]
 #    )*           # repeat this subpattern (,###) any number of times (including none at all)
 #      (?:\.\d{2})? # optionally followed by a decimal perioda and exactly two digits
 #      $)             # End of string.
-
