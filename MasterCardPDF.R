@@ -161,7 +161,6 @@ if (DocType=="ICS") {
       #does not work properly with multiple instances of debet etc
       CCRegel <- substr(CCRegel, 1, PosBIJAF - 2) #strip BIJ/AF from text aan einde van regel
       DATSTART <- regexpr("\\d{2}\\s...\\s\\d{2}", CCRegel)[1] #search where (and if) date starts dd mmm dd
-      message("i:",i," BA:",BIJAF,"/",PosBIJAF,"==Datumpositie:",DATSTART)
       if (DATSTART >= 0) {
         mCreditCard[i, "Datum"] <- paste(substr(CCRegel, DATSTART, 6), year) # dd mmm yyyy Column 4 Datum take part from line and add Year
         CCRegel <- substr(CCRegel, 8, nchar(CCRegel)) #strip datum
