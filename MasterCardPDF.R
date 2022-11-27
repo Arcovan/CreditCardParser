@@ -1,12 +1,12 @@
 # This program converts credit card statements to CSV-format to import into accounting system
 # PDF provided by CC-Company is converted to CSV
-# options(encoding = "ISO-8859-1")
 
+# options(encoding = "ISO-8859-1")
 # install.packages("dplyr")
 # library(dplyr)
 # install.packages("devtools")
 # devtools::install_github("Arcovan/Rstudio")
-
+# Date : 27-nov-2022
 # ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
   TxtBedrag <- x
@@ -47,25 +47,20 @@ message("Output file to directory: ", getwd())
 options(OutDec = ".")     #set decimal point to "."
 
 # Read PDF-> PDFList and validate -------------------
-PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Char
+PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Vector of Char every page is element
 PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces
 NrOfPages <- length(PDFRaw)             # number of objects in list = nr of pages in PDF
 PDFList <- strsplit(PDFRaw, split = "\n") #type list; page per entry
+PDFList
 NROF_RawLines <- sum(lengths(PDFList))
 message("Number of lines read: ", NROF_RawLines, " from " , NrOfPages , " page(s).")
 if (NROF_RawLines == 0) {
   stop("No characters found in ",basename(ifile)," \nProbably only scanned images in PDF and not a native PDF.")
 }
-# Add pages to vector ---------------------------------------------------
-# ==== add all elements of list (pages) to 1 vector for easy processing 
-# CCRaw contains full PDF line per line in txt format Every line is an item in the list
-page <- 1
-CCRaw <- PDFList[[page]]
-page <- page + 1
-while (page <= NrOfPages) {
-  CCRaw <- append(CCRaw, PDFList[[page]]) #all seperate pages to 1 list plain raw PDF 
-  page <- page + 1
-}
+# Add pages to vector of character ------------------------------------------
+# for easy processing 
+# CCRaw contains full PDF line per line in txt format Every line is an element in the list
+CCRaw<-unlist(PDFList)
 
 # # check document type (little too much evaluation but don't know --------
 DocType<-CheckDocType(CCRaw)  #doctype means which credit card supplier
@@ -77,6 +72,7 @@ if (DocType=="UNKNOWN"){
   }
   stop("Documenttype is not recognised. (No ING and no ICS)")
 } 
+
 if (DocType=="ING") { 
   message("ING AFSCHRIFT Recognised in English language.\n")
   DateLineNR<-which(regexpr("\\d{2}\\-\\d{2}-\\d{4}", CCRaw, perl = TRUE)>0)[1]
