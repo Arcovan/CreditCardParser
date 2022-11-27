@@ -6,6 +6,8 @@
 # library(dplyr)
 # install.packages("devtools")
 # devtools::install_github("Arcovan/Rstudio")
+
+# ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
   TxtBedrag <- x
   TxtBedrag <- (sub(",", "d", TxtBedrag, fixed = TRUE))
@@ -28,15 +30,15 @@ Subtype <- function(x) {
   return(Sub)
 } # for mastercard only can be business or personal
 
-# Select Import file ------------------------------------------------------
+# ==== Read and check Import file ------------------------------------------------------
 ifile <- file.choose()
-if (!(grepl(".pdf",ifile))) {     # Grepl = grep logical
+if (!(grepl(".pdf",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep logical
   stop("Please choose file with extension 'pdf'.\n")
 }
 if (ifile == "") {
   stop("Empty File name [ifile]\n")
 }
-ofile <- sub(".pdf","-PYukiR.csv", ifile) #output file same name but different extension
+ofile <- sub(".pdf","-PYukiR.csv", ifile,ignore.case = TRUE) #output file same name but different extension
 setwd(dirname(ifile))     #set working directory to input directory where file is
 message("Input file: ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
 message("Output file to directory: ", getwd())
