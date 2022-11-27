@@ -46,12 +46,11 @@ message("Output file to directory: ", getwd())
 # ==== SET Environment ====
 options(OutDec = ".")     #set decimal point to "."
 
-# Read PDF-> PDFList and validate -------------------
+# Read PDF--------------------
 PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Vector of Char every page is element
 PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces
 NrOfPages <- length(PDFRaw)             # number of objects in list = nr of pages in PDF
 PDFList <- strsplit(PDFRaw, split = "\n") #type list; page per entry
-PDFList
 NROF_RawLines <- sum(lengths(PDFList))
 message("Number of lines read: ", NROF_RawLines, " from " , NrOfPages , " page(s).")
 if (NROF_RawLines == 0) {
@@ -91,17 +90,16 @@ if (DocType=="ING") {
 } #Extract Date Document and other document header info
 if (DocType=="ICS") {
   #Extract Date Document and other document header info 
-  #MasterCard ******   ICS (MasterCard) *******
-  DateLineNR <- which(substr(CCRaw, 1, 9) == "Datum ICS")[1] + 1 # find line nr containing Document Date
-  LineElements <- unlist(strsplit(CCRaw[DateLineNR], " ")) #split words in line in seperate elements
+  DateLineNR <- grep("Datum ICS",CCRaw)[1]+1 # find line nr containing Document Date on first page
+  LineElements <- unlist(strsplit(CCRaw[DateLineNR], " ")) #split words in line in separate elements
   year <- LineElements[3]
   MonthNL<-c("januari", "februari", "maart", "april","mei", "juni","juli","augustus","september","oktober","november","december")
-  month.abb[which(LineElements[2]==MonthNL)] #translate to fit as.date function
   DatumAfschrift <- paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year) # dd mmm yyyy
-  DatumAfschrift <-as.Date(DatumAfschrift,"%d %b %Y") # DOES NOT WORK WITH DUTCH  DATES
+  DatumAfschrift <-as.Date(DatumAfschrift,"%d %b %Y") # DOES NOT WORK WITH DUTCH DATES
   maand<-strftime(DatumAfschrift,"%m")
+  
   CCAccount <-LineElements[4]     # Hard coded, could be better.. ICS Klantnummer
-  Afschriftnr <- LineElements[5]  # currently not really used ; AFSCHRIFT is composed of YearMonthmont.
+  Afschriftnr <- LineElements[5]  # currently not really used ; AFSCHRIFT is composed of YearMonth.
   message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nVolgnummer: ", Afschriftnr)
   message("Account:", CCAccount, " [",Subtype(CCRaw), "]")
   # Define 4 digit credit card number and store in Card4DigitsLineNR ---------------------------
