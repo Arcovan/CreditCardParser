@@ -1,20 +1,19 @@
 # This program converts credit card statements to CSV-format to import into accounting system
 # PDF provided by CC-Company is converted to CSV
-
 # options(encoding = "ISO-8859-1")
 # install.packages("dplyr")
 # library(dplyr)
 # install.packages("devtools")
 # devtools::install_github("Arcovan/Rstudio")
-# Date : 27-nov-2022
+# Date : 14 April 2023
+library(pdftools)
 # ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
-  TxtBedrag <- x
-  TxtBedrag <- (sub(",", "d", TxtBedrag, fixed = TRUE))
-  TxtBedrag <- (sub(".", "t", TxtBedrag, fixed = TRUE))
-  TxtBedrag <- (sub("d", ".", TxtBedrag, fixed = TRUE))
-  TxtBedrag <- (sub("t", "", TxtBedrag, fixed = TRUE))
-  TxtBedrag <- as.numeric(TxtBedrag) # since txt string has format "##.###,##"
+  # Remove period separators and convert comma to decimal point
+  x <- gsub(".", "", x, fixed = TRUE)  # nb should be "\\." but that does not work I dont knwo why but this works
+  x <- gsub(",", ".", x, fixed = TRUE)
+  result<- as.numeric(x) # since txt string has format "##.###,##"
+  return(result)
 } # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
@@ -40,7 +39,7 @@ if (ifile == "") {
 }
 ofile <- sub(".pdf","-PYukiR.csv", ifile,ignore.case = TRUE) #output file same name but different extension
 setwd(dirname(ifile))     #set working directory to input directory where file is
-message("Input file: ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
+message("Input fileConvertAmount ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
 message("Output file to directory: ", getwd())
 
 # ==== SET Environment ====
@@ -60,7 +59,6 @@ if (NROF_RawLines == 0) {
 # for easy processing 
 # CCRaw contains full PDF line per line in txt format Every line is an element in the list
 CCRaw<-unlist(PDFList)
-
 # # check document type (little too much evaluation but don't know --------
 DocType<-CheckDocType(CCRaw)  #doctype means which credit card supplier
 if (DocType=="UNKNOWN"){
@@ -181,7 +179,7 @@ if (DocType=="ICS") {
 
   if (length(CCnr)==1){
     message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
-    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"])
+    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]) #add 4 digits cc to description
   } else {
     if (length(CCnr)>1){
       message("Cards: ",CCnr[1],"/Van:",Card4DigitsLineNR[1]+1," TOT:",Card4DigitsLineNR[2]-1)
@@ -216,6 +214,7 @@ if (DocType=="ING") {
 }
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
+View(mCreditCard)
 # Delete empty Lines
 if (length(which(CreditCardDF$Bedrag == 0)) != 0) {
   CreditCardDF <-
