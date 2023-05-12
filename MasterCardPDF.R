@@ -5,7 +5,9 @@
 # library(dplyr)
 # install.packages("devtools")
 # devtools::install_github("Arcovan/Rstudio")
-# Date : 14 April 2023
+# Date : 12 May 2023
+# HSBC is work in progress 
+
 library(pdftools)
 # ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
@@ -17,10 +19,12 @@ ConvertAmount <- function(x) {
 } # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
-  ProfileTXT<-c("Mastercard|International Card Services BV","Statement ING Corporate Card")
-  if (length(grep(ProfileTXT[1], x))!=0) { DocType<-"ICS"}
-  if (length(grep(ProfileTXT[2], x))!=0) { DocType<-"ING"}
-  return(DocType)
+  ProfileTXT<-c("Mastercard|International Card Services BV","Statement ING Corporate Card","www.business.hsbc.fr")
+  if (length(grep(ProfileTXT[1], x[1]))!=0) { DocType<-"ICS"}
+  if (length(grep(ProfileTXT[2], x[1]))!=0) { DocType<-"ING"}
+  if (length(grep(ProfileTXT[3], x[4]))!=0) { DocType<-"HSBC"}
+  #return(DocType)
+  return(list(DocType = DocType, ProfileTXT = ProfileTXT))
 }
 Subtype <- function(x) {
   if (length(grep("Mastercard Business Card",x))!=0) {
@@ -60,7 +64,9 @@ if (NROF_RawLines == 0) {
 # CCRaw contains full PDF line per line in txt format Every line is an element in the list
 CCRaw<-unlist(PDFList)
 # # check document type (little too much evaluation but don't know --------
-DocType<-CheckDocType(CCRaw)  #doctype means which credit card supplier
+result<-CheckDocType(CCRaw)  #doctype means which credit card supplier / multiple  variables returned
+DocType<-result$DocType
+ProfileTXT<-result$ProfileTXT
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
   m<-c(1:length(ProfileTXT))  #defined in function CheckDoctype
@@ -117,6 +123,7 @@ if (DocType=="ICS") {
     message("Kaart:", CCnr[i])
   }
 } #Extract Date Document and other document header info 
+if (DocType=="HSBC") {message("HSBC")}
 pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
 nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
 #create new empty Matrix mCreditCard
