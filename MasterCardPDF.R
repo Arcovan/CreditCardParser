@@ -23,7 +23,6 @@ CheckDocType <- function(x) {
   if (length(grep(ProfileTXT[1], x[1]))!=0) { DocType<-"ICS"}
   if (length(grep(ProfileTXT[2], x[1]))!=0) { DocType<-"ING"}
   if (length(grep(ProfileTXT[3], x[4]))!=0) { DocType<-"HSBC"}
-  #return(DocType)
   return(list(DocType = DocType, ProfileTXT = ProfileTXT))
 }
 Subtype <- function(x) {
@@ -65,8 +64,8 @@ if (NROF_RawLines == 0) {
 CCRaw<-unlist(PDFList)
 # # check document type (little too much evaluation but don't know --------
 result<-CheckDocType(CCRaw)  #doctype means which credit card supplier / multiple  variables returned
-DocType<-result$DocType
-ProfileTXT<-result$ProfileTXT
+  DocType<-result$DocType
+  ProfileTXT<-result$ProfileTXT
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
   m<-c(1:length(ProfileTXT))  #defined in function CheckDoctype
@@ -123,7 +122,20 @@ if (DocType=="ICS") {
     message("Kaart:", CCnr[i])
   }
 } #Extract Date Document and other document header info 
-if (DocType=="HSBC") {message("HSBC")}
+if (DocType=="HSBC") {
+  DateLineNR<-grep("SOLDE DE FIN DE PERIODE", CCRaw)
+  DatumAfschrift <-regmatches(CCRaw[DateLineNR], regexpr("\\d{2}\\.\\d{2}\\.\\d{4}",CCRaw[DateLineNR]))   # Extract date from string
+  DatumAfschrift <-as.Date(DatumAfschrift,"%d.%m.%Y") 
+  maand<-format(DatumAfschrift,"%m")
+  year<-format(DatumAfschrift,"%Y")
+  #
+  IBANLineNR<-grep("IBAN", CCRaw)
+  CCRaw[IBANLineNR]
+  IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("IBAN [A-Z]{2}\\d{2}\\s(?:\\d{4}\\s?){4}\\d{3}", CCRaw[IBANLineNR]))
+  IBAN <- gsub("IBAN ", "", IBAN) # Remove the "IBAN " prefix from the extracted string
+  IBAN <- gsub(" ","",IBAN)       # Remove spacesfrom the extracted string
+  }
+  
 pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
 nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
 #create new empty Matrix mCreditCard
