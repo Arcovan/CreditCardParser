@@ -1,21 +1,19 @@
-# This program converts credit card statements to CSV-format to import into accounting system
+# This program converts PDF credit card and Bank statements to CSV-format to import into accounting system
 # PDF provided by CC-Company is converted to CSV
-# options(encoding = "ISO-8859-1")
-# install.packages("dplyr")
-# library(dplyr)
-# install.packages("devtools")
+# Current support PFD statement : CC: Master Card and ING Bank: HSBC
 # devtools::install_github("Arcovan/Rstudio")
-# Date : 12 May 2023
-# HSBC is work in progress 
+# Date : 14 May 2023
+# HSBC is added but more or less autonomous; many improvement compare to my first step in R
 
 library(pdftools)
+options(OutDec = ".")     #set decimal point to "."
 # ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
   # Remove period separators and convert comma to decimal point
   x <- gsub(".", "", x, fixed = TRUE)  # nb should be "\\." but that does not work I dont knwo why but this works
   x <- gsub(",", ".", x, fixed = TRUE)
   result<- as.numeric(x) # since txt string has format "##.###,##"
-  return(result)
+return(result)
 } # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
@@ -45,9 +43,6 @@ setwd(dirname(ifile))     #set working directory to input directory where file i
 message("Input fileConvertAmount ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
 message("Output file to directory: ", getwd())
 
-# ==== SET Environment ====
-options(OutDec = ".")     #set decimal point to "."
-
 # Read PDF--------------------
 PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Vector of Char every page is element
 PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces
@@ -72,9 +67,9 @@ if (DocType=="UNKNOWN"){
   for (i in m) {
     message(ProfileTXT[i]) 
   }
-  stop("Documenttype is not recognised. (No ING and no ICS)")
-} 
-
+  stop("Documenttype is not recognised. (No ING and no ICS and no HSBC bank)")
+} # Stop
+# read generic header info 
 if (DocType=="ING") { 
   message("ING AFSCHRIFT Recognised in English language.\n")
   DateLineNR<-which(regexpr("\\d{2}\\-\\d{2}-\\d{4}", CCRaw, perl = TRUE)>0)[1]
@@ -129,15 +124,19 @@ if (DocType=="HSBC") {
   maand<-format(DatumAfschrift,"%m")
   year<-format(DatumAfschrift,"%Y")
   #
+  Afschriftnr <- paste(year, maand, sep = "") # 202304 example
+  #
   IBANLineNR<-grep("IBAN", CCRaw)
   CCRaw[IBANLineNR]
-  IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("IBAN [A-Z]{2}\\d{2}\\s(?:\\d{4}\\s?){4}\\d{3}", CCRaw[IBANLineNR]))
-  IBAN <- gsub("IBAN ", "", IBAN) # Remove the "IBAN " prefix from the extracted string
-  IBAN <- gsub(" ","",IBAN)       # Remove spacesfrom the extracted string
+  IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("(?<=IBAN )[A-Z]{2}[0-9]{2}(?: [0-9]{4}){5} [0-9]{3}", CCRaw[IBANLineNR], perl=TRUE))
+  message("CreditCard Account:", IBAN, " DatumAfschrift: ", DatumAfschrift," Afschrift: ", Afschriftnr)
   }
   
 pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
 nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
+#create new empty datafram to hold raw statement similar to mCreditCard
+StatementDF <- data.frame(Omschrijving = character(length = NROF_RawLines),
+                          Bedrag = numeric(length = NROF_RawLines))
 #create new empty Matrix mCreditCard
 mCreditCard <-
   matrix(data = "",
@@ -154,6 +153,8 @@ colnames(mCreditCard) <-
     "Naam tegenrekening",
     "Omschrijving"
   )
+StatementDF$Omschrijving<-CCRaw
+View(StatementDF)
 mCreditCard[, "Omschrijving"] <- CCRaw     # assign vector to column in matrix to start splitting to columns
 #create seperate Data Frame since amount is different datatype and does not match matrix
 mBedrag <- matrix(data = 0,
@@ -230,6 +231,100 @@ if (DocType=="ING") {
     mCreditCard[i, "Omschrijving"] <- CCRegel #after all stripping Description is left
     i <- i + 1
   }
+}
+if (DocType=="HSBC") {
+  pattern <- "^\\d{2}\\.\\d{2}" # "dd.mm" from the beginning of the line
+  # Find rows matching the pattern
+  statementlines <- grep(pattern, StatementDF$Omschrijving) # based on date we know it is a statement line
+  statementlines
+  StatementDF$Omschrijving[statementlines]
+  NR_StatementLines <- length(statementlines)
+# Extract the amount using regular expressions
+  LineAmount <- regmatches(StatementDF$Omschrijving, regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving, perl = TRUE))
+  LineAmount <- ConvertAmount(LineAmount)  # 2 amount too many and no distinction between debet and credit.
+  length(LineAmount)
+  LineAmount
+  # Initialize an empty vector to store the concatenated descriptions
+  concatenated_descriptions <- character(length(statementlines))
+  for (i in 1:(length(statementlines) - 1)) {
+    start_row <- statementlines[i]
+    end_row <- statementlines[i + 1] - 1
+    concatenated_description <- paste(StatementDF$Omschrijving[start_row:end_row], collapse = " ")
+    concatenated_descriptions[i] <- concatenated_description
+  }
+  i<-i+1
+  start_row <- statementlines[i]
+  grep("TOTAL DES MOUVEMENTS",StatementDF$Omschrijving)
+  end_row <- grep("TOTAL DES MOUVEMENTS",StatementDF$Omschrijving)-1
+  concatenated_description <- paste(StatementDF$Omschrijving[start_row:end_row], collapse = " ")
+  concatenated_descriptions[i] <- concatenated_description
+  
+  Footer<-"---------------------------------------------------------------------------------------------------------------------------------------"
+  concatenated_descriptions<-gsub(Footer,"",concatenated_descriptions)
+  RIB<-"Relevé d'Identité Bancaire (RIB) RIB Banque Agence N° compte Clé Titulaire : SCI BEACH INVESTMENTS 30056 00228 02282000057 23 Domiciliation : ST TROPEZ Tel : 04 94 55 82 90 IBAN FR76 3005 6002 2802 2820 0005 723 BIC CCFRFRPP"
+  concatenated_descriptions<-gsub(RIB,"RIB",concatenated_descriptions, fixed = TRUE) # fixed to avoid as regex
+  Footer2<-"HSBC Continental Europe - Société Anonyme au capital de 1 062 332 775 euros - SIREN 775 670 284 RCS Paris Siège social : 38 avenue Kléber 75116 Paris - www.hsbc.fr - N° TVA intracommunautaire FR 70 775 670 284"
+  concatenated_descriptions<-gsub(Footer2,"",concatenated_descriptions, fixed = TRUE)
+  Header<-"Votre Relevé de Compte e Date Détail des opérations Valeur x Débit Crédit o"
+  concatenated_descriptions<-gsub(Header,"",concatenated_descriptions, fixed = TRUE)
+  
+  YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
+                       Valuta = character(length = NR_StatementLines),
+                       Afschrift = integer(length = NR_StatementLines),
+                       Datum = character(length = NR_StatementLines),
+                       Rentedatum = character(length = NR_StatementLines),
+                       Tegenrekening = character(length = NR_StatementLines),
+                       Naam_tegenrekening = character(length = NR_StatementLines),
+                       Omschrijving = character(length = NR_StatementLines),
+                       Bedrag = numeric(NR_StatementLines))
+
+  YukiDF$Omschrijving<-concatenated_descriptions
+  LineAmount[1:NR_StatementLines+1]
+  YukiDF$Bedrag<--LineAmount[1:NR_StatementLines+1] # the first row and the last 2 rows are balance
+  YukiDF$IBAN<-gsub("\\s","",IBAN)
+  YukiDF$Valuta<-"EUR"
+  YukiDF$Afschrift<-Afschriftnr
+  YukiDF$Datum<- format(as.Date(paste(regmatches(YukiDF$Omschrijving, regexpr("\\d{2}\\.\\d{2}",YukiDF$Omschrijving)),year,sep = "."), "%d.%m.%Y"),format = "%d-%m-%Y")
+  matches <- regmatches(YukiDF$Omschrijving, gregexpr("\\d{2}\\.\\d{2}", YukiDF$Omschrijving))
+  second_occurrence <- sapply(matches, function(x) ifelse(length(x) >= 2, x[2], NA))
+  second_occurrence
+  YukiDF$Rentedatum <-format(as.Date(paste(second_occurrence,year,sep = "."), "%d.%m.%Y"),format = "%d-%m-%Y")
+  YukiDF$Omschrijving <-gsub("\\d{2}\\.\\d{2}\\s", "", YukiDF$Omschrijving) # now we have extracted the dates they can be removed
+  pattern <- "\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b"
+  YukiDF$Omschrijving<-gsub(pattern, "", YukiDF$Omschrijving) # also remove amounts from description
+  YukiDF$Omschrijving <-gsub('\\"', "", YukiDF$Omschrijving)
+  YukiDF$Bedrag[grep("PRLV SEPA REJ/IMP|VIRT SEPA", YukiDF$Omschrijving)]<--YukiDF$Bedrag[grep("PRLV SEPA REJ/IMP|VIRT SEPA", YukiDF$Omschrijving)]
+  # parse names
+  pattern <- "\\b[a-zA-Z]{5,}\\b" # first word of minimum 5 non digits
+  matches <- regmatches(YukiDF$Omschrijving, regexpr(pattern, YukiDF$Omschrijving))
+  YukiDF$Naam_tegenrekening[grep(pattern,YukiDF$Omschrijving)]<-matches
+  matching_indices <- grep(pattern, YukiDF$Omschrijving)
+  YukiDF$Naam_tegenrekening[matching_indices] <- matches[!is.na(matches)]
+  matches
+  #
+  View(YukiDF)
+  ColumnNames <-
+    c(
+      "IBAN",
+      "Valuta",
+      "Afschrift",
+      "Datum",
+      "Rentedatum",
+      "Tegenrekening",
+      "Naam tegenrekening",
+      "Omschrijving",
+      "Bedrag"
+    )
+  write.table(
+    YukiDF,
+    file = ofile,
+    quote = FALSE,
+    sep = ";",
+    dec = ".",
+    row.names = FALSE,
+    col.names = ColumnNames
+  )
+  Stop("einde")
 }
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
