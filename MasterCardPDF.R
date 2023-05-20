@@ -2,18 +2,18 @@
 # PDF provided by CC-Company is converted to CSV
 # Current support PFD statement : CC: Master Card and ING Bank: HSBC
 # devtools::install_github("Arcovan/Rstudio")
-# Date : 14 May 2023
-# HSBC is added but more or less autonomous; many improvement compare to my first step in R
+# Date : 20 May 2023
+# HSBC is added but more or less separally; many improvements compare to my first step in R
 
 library(pdftools)
 options(OutDec = ".")     #set decimal point to "."
 # ===== Define Functions --------------------------------------------------
 ConvertAmount <- function(x) {
   # Remove period separators and convert comma to decimal point
-  x <- gsub(".", "", x, fixed = TRUE)  # nb should be "\\." but that does not work I dont knwo why but this works
+  x <- gsub(".", "", x, fixed = TRUE)  # fixed =TRUE treats "." literally and no \\. is required.
   x <- gsub(",", ".", x, fixed = TRUE)
   result<- as.numeric(x) # since txt string has format "##.###,##"
-return(result)
+  return(result)
 } # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
@@ -32,35 +32,35 @@ Subtype <- function(x) {
 
 # ==== Read and check Import file ------------------------------------------------------
 ifile <- file.choose()
-if (!(grepl(".pdf",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep logical
+if (!(grepl("\\.pdf",basename(ifile),ignore.case = TRUE, perl = FALSE))) {     # Grepl = grep logical
   stop("Please choose file with extension 'pdf'.\n")
 }
 if (ifile == "") {
   stop("Empty File name [ifile]\n")
 }
-ofile <- sub(".pdf","-PYukiR.csv", ifile,ignore.case = TRUE) #output file same name but different extension
+ofile <- sub("\\.pdf","-PYukiR.csv", ifile,ignore.case = TRUE, perl = FALSE) #output file same name but different extension 
 setwd(dirname(ifile))     #set working directory to input directory where file is
-message("Input fileConvertAmount ", basename(ifile), "\nOutput file: ", basename(ofile)) # display filename and output file with full dir name
+message("Input  file: ", basename(ifile), "\n") # display filename and output file with full dir name
 message("Output file to directory: ", getwd())
 
 # Read PDF--------------------
 PDFRaw <- pdftools::pdf_text(ifile)     # read PDF and store in type Vector of Char every page is element
-PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces
-NrOfPages <- length(PDFRaw)             # number of objects in list = nr of pages in PDF
-PDFList <- strsplit(PDFRaw, split = "\n") #type list; page per entry
-NROF_RawLines <- sum(lengths(PDFList))
-message("Number of lines read: ", NROF_RawLines, " from " , NrOfPages , " page(s).")
-if (NROF_RawLines == 0) {
+if (!any(nchar(PDFRaw))) {
   stop("No characters found in ",basename(ifile)," \nProbably only scanned images in PDF and not a native PDF.")
 }
-# Add pages to vector of character ------------------------------------------
-# for easy processing 
-# CCRaw contains full PDF line per line in txt format Every line is an element in the list
-CCRaw<-unlist(PDFList)
+#PDFRaw <- gsub("\\s{2,}", " ", PDFRaw) # strip double spaces Unclear buf with this way of stripping(does not strip this \n)
+PDFRaw <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", PDFRaw, perl = TRUE) # strip double spaces (and \n at the end of every page)
+
+# number of objects in list PDFRaw = nr of pages in PDF
+PDFList <- strsplit(PDFRaw, split = "\n") #type list; page per entry
+CCRaw<-unlist(PDFList) # CCRaw contains full PDF line per line in txt format
+NROF_RawLines <- length(CCRaw)
+message("Number of lines read: ", NROF_RawLines, " from " , length(PDFRaw) , " page(s).")
+
 # # check document type (little too much evaluation but don't know --------
-result<-CheckDocType(CCRaw)  #doctype means which credit card supplier / multiple  variables returned
-  DocType<-result$DocType
-  ProfileTXT<-result$ProfileTXT
+result<-CheckDocType(CCRaw)  #doctype means which credit card supplier / multiple variables returned
+DocType<-result$DocType
+ProfileTXT<-result$ProfileTXT
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
   m<-c(1:length(ProfileTXT))  #defined in function CheckDoctype
@@ -69,7 +69,7 @@ if (DocType=="UNKNOWN"){
   }
   stop("Documenttype is not recognised. (No ING and no ICS and no HSBC bank)")
 } # Stop
-# read generic header info 
+# read generic header info from CCRaw
 if (DocType=="ING") { 
   message("ING AFSCHRIFT Recognised in English language.\n")
   DateLineNR<-which(regexpr("\\d{2}\\-\\d{2}-\\d{4}", CCRaw, perl = TRUE)>0)[1]
@@ -88,16 +88,18 @@ if (DocType=="ING") {
 } #Extract Date Document and other document header info
 if (DocType=="ICS") {
   #Extract Date Document and other document header info 
-  DateLineNR <- grep("Datum ICS",CCRaw)[1]+1 # find line nr containing Document Date on first page
+  ofile <- sub("Rekeningoverzicht", "ICS", ofile, ignore.case = TRUE) # Adjust name to identify CreditCard in Name 
+  DateLineNR <- grep("Datum ICS-klantnummer Volgnummer Bladnummer",CCRaw)[1]+1 # find line nr containing Document Date on first page
   LineElements <- unlist(strsplit(CCRaw[DateLineNR], " ")) #split words in line in separate elements
   year <- LineElements[3]
   MonthNL<-c("januari", "februari", "maart", "april","mei", "juni","juli","augustus","september","oktober","november","december")
   DatumAfschrift <- paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year) # dd mmm yyyy
   DatumAfschrift <-as.Date(DatumAfschrift,"%d %b %Y") # DOES NOT WORK WITH DUTCH DATES
-  maand<-strftime(DatumAfschrift,"%m")
+  maand<-format(DatumAfschrift,"%m")
   
-  CCAccount <-LineElements[4]     # Hard coded, could be better.. ICS Klantnummer
   Afschriftnr <- LineElements[5]  # currently not really used ; AFSCHRIFT is composed of YearMonth.
+  CCAccount <-LineElements[4]     # Hard coded, could be better.. ICS Klantnummer
+  
   message("Datum Afschrift: ", paste(LineElements[1], month.abb[which(LineElements[2]==MonthNL)], year), " \nVolgnummer: ", Afschriftnr)
   message("Account:", CCAccount, " [",Subtype(CCRaw), "]")
   # Define 4 digit credit card number and store in Card4DigitsLineNR ---------------------------
@@ -118,30 +120,32 @@ if (DocType=="ICS") {
   }
 } #Extract Date Document and other document header info 
 if (DocType=="HSBC") {
+  #Extract Date Document and other document header info 
+  ofile <- sub("RELEVEDECOMPTE", "HSBC", ofile, ignore.case = TRUE) # Adjust name to identify CreditCard in Name 
   DateLineNR<-grep("SOLDE DE FIN DE PERIODE", CCRaw)
   DatumAfschrift <-regmatches(CCRaw[DateLineNR], regexpr("\\d{2}\\.\\d{2}\\.\\d{4}",CCRaw[DateLineNR]))   # Extract date from string
   DatumAfschrift <-as.Date(DatumAfschrift,"%d.%m.%Y") 
   maand<-format(DatumAfschrift,"%m")
-  year<-format(DatumAfschrift,"%Y")
+  year<-format(DatumAfschrift,"%Y") #probably not used
   #
   Afschriftnr <- paste(year, maand, sep = "") # 202304 example
   #
   IBANLineNR<-grep("IBAN", CCRaw)
   CCRaw[IBANLineNR]
   IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("(?<=IBAN )[A-Z]{2}[0-9]{2}(?: [0-9]{4}){5} [0-9]{3}", CCRaw[IBANLineNR], perl=TRUE))
-  message("CreditCard Account:", IBAN, " DatumAfschrift: ", DatumAfschrift," Afschrift: ", Afschriftnr)
-  }
-  
-pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
-nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
-#create new empty datafram to hold raw statement similar to mCreditCard
+  message("Account:", IBAN, " DatumAfschrift: ", DatumAfschrift," Afschrift: ", Afschriftnr)
+}#Extract Date Document and other document header info 
+message("Output file: ", basename(ofile), "\n")
+# New code :create new empty datafram to hold raw statement similar to mCreditCard
 StatementDF <- data.frame(Omschrijving = character(length = NROF_RawLines),
-                          Bedrag = numeric(length = NROF_RawLines))
-#create new empty Matrix mCreditCard
+                          Bedrag = numeric(length = NROF_RawLines)) # currently Only for HSBC
+StatementDF$Omschrijving<-CCRaw # currently Only for HSBC alternative for mCreditCard with only 2 columns
+View(StatementDF)
+#create new empty Matrix mCreditCard ----
 mCreditCard <-
   matrix(data = "",
          nrow = NROF_RawLines,
-         ncol = 8) #create empty matrix Import format Yuki Bank Statements
+         ncol = 8) #create empty matrix Import format Yuki Bank Statements (I didnt know DF well enough ;))
 colnames(mCreditCard) <-
   c(
     "IBAN",
@@ -153,23 +157,48 @@ colnames(mCreditCard) <-
     "Naam tegenrekening",
     "Omschrijving"
   )
-StatementDF$Omschrijving<-CCRaw
-View(StatementDF)
+CCRaw
+if (DocType=="ICS") {
+  # ------ New style ------------------
+  # Extra all amount for line with 'Af' in the staement Line
+  NR_StatementLines<-length(grep("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", CCRaw)) # "dd aaa dd aaa" from the beginning f the line
+  YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
+                       Valuta = character(length = NR_StatementLines),
+                       Afschrift = integer(length = NR_StatementLines),
+                       Datum = character(length = NR_StatementLines),
+                       Rentedatum = character(length = NR_StatementLines),
+                       Tegenrekening = character(length = NR_StatementLines),
+                       Naam_tegenrekening = character(length = NR_StatementLines),
+                       Omschrijving = character(length = NR_StatementLines),
+                       Bedrag = numeric(NR_StatementLines))
+  YukiDF$Omschrijving<- StatementDF$Omschrijving[grepl("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", StatementDF$Omschrijving)] # "dd aaa dd aaa" from the beginning f the line
+  View(YukiDF)
+  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], perl = TRUE))
+  LineAmount<-ConvertAmount(LineAmount)
+  StatementDF$Bedrag[grep("Af", StatementDF$Omschrijving)]<--LineAmount
+  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], perl = TRUE))
+  LineAmount<-ConvertAmount(LineAmount)
+  StatementDF$Bedrag[grep("Bij", StatementDF$Omschrijving)]<-LineAmount
+  YukiDF$Omschrijving<-gsub("Af|Bij", "", YukiDF$Omschrijving)
+  YukiDF$Omschrijving<-gsub("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", "", YukiDF$Omschrijving)
+  
+  trimws(StatementDF$Omschrijving)
+  # regmatches(StatementDF$Omschrijving, regexpr("\\d{2}\\s[a-z]{3}\\s\\d{2}",StatementDF$Omschrijving))
+} # New Style using DF (unfinished)
+
 mCreditCard[, "Omschrijving"] <- CCRaw     # assign vector to column in matrix to start splitting to columns
 #create seperate Data Frame since amount is different datatype and does not match matrix
-mBedrag <- matrix(data = 0,
-                  nrow = NROF_RawLines,
-                  ncol = 1)
-colnames(mBedrag) <- c("Bedrag")
-BedragDF <- data.frame(mBedrag) #convert matrix to data frame
-message("Start split ",DocType, "-document in 8 columns and: ", NROF_RawLines, " raw lines.\n")
+View(mCreditCard)
+BedragDF <- data.frame(Bedrag = numeric(length = NROF_RawLines)) # seperate since a matrix cannot contain both char and numeric 
+message("Start split ",DocType, "-raw text in 8 columns and: ", NROF_RawLines, " raw lines.\n")
+# extract dates and amount from statement lines
 i <- 1
 if (DocType=="ICS") {
   while (i <= NROF_RawLines) {
     CCRegel <- mCreditCard[i, "Omschrijving"] # CCRegel Used for stripping step by step
-    Lengte <- nchar(CCRegel)
     PosBIJAF <- regexpr("Bij|Af|credit|debet", CCRegel)[1]  # not perfect with multiple occurences
     LenBIJAF <- attr(regexpr("Bij|Af|credit|debet", CCRegel), "match.length")
+    # "Bij" or "Af" identifies the real statement lines, from these lines, date and amount are extracted
     if (PosBIJAF >= 0) {    # BIJ AF found means line relevant for output
       BIJAF <- substr(CCRegel, PosBIJAF, PosBIJAF + LenBIJAF) # text BIJ or Text Af end of line
       #does not work properly with multiple instances of debet etc
@@ -196,7 +225,6 @@ if (DocType=="ICS") {
     }
     i <- i + 1
   }
-
   if (length(CCnr)==1){
     message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
     mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]) #add 4 digits cc to description
@@ -239,7 +267,7 @@ if (DocType=="HSBC") {
   statementlines
   StatementDF$Omschrijving[statementlines]
   NR_StatementLines <- length(statementlines)
-# Extract the amount using regular expressions
+  # Extract the amount using regular expressions
   LineAmount <- regmatches(StatementDF$Omschrijving, regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving, perl = TRUE))
   LineAmount <- ConvertAmount(LineAmount)  # 2 amount too many and no distinction between debet and credit.
   length(LineAmount)
@@ -277,7 +305,7 @@ if (DocType=="HSBC") {
                        Naam_tegenrekening = character(length = NR_StatementLines),
                        Omschrijving = character(length = NR_StatementLines),
                        Bedrag = numeric(NR_StatementLines))
-
+  
   YukiDF$Omschrijving<-concatenated_descriptions
   LineAmount[1:NR_StatementLines+1]
   YukiDF$Bedrag<--LineAmount[1:NR_StatementLines+1] # the first row and the last 2 rows are balance
@@ -315,6 +343,7 @@ if (DocType=="HSBC") {
       "Omschrijving",
       "Bedrag"
     )
+  ofile
   write.table(
     YukiDF,
     file = ofile,
@@ -326,10 +355,11 @@ if (DocType=="HSBC") {
   )
   Stop("einde")
 }
+
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
 View(mCreditCard)
-# Delete empty Lines
+# Delete empty Lines in CreditCard Dataframe 
 if (length(which(CreditCardDF$Bedrag == 0)) != 0) {
   CreditCardDF <-
     CreditCardDF[-c(which(CreditCardDF$Bedrag == 0)),] 
@@ -355,17 +385,15 @@ if (DocType=="ING") {
   if (Line>0) {CreditCardDF$Bedrag[Line]<-(-CreditCardDF$Bedrag[Line])} # Positive amount is direct debet of previous account
 }
 # prepare for date conversion
-CreditCardDF$Datum <- gsub("mrt", 'mar', CreditCardDF$Datum) # mrt is not recognised as month for date conversion so replace
-CreditCardDF$Datum <- gsub("mei", 'may', CreditCardDF$Datum) # mei is not recognised as month for date conversion so replace
-CreditCardDF$Datum <- gsub("okt", 'oct', CreditCardDF$Datum) # okt is not recognised as month for date conversion so replace
-CreditCardDF$Datum <- as.Date(CreditCardDF$Datum, "%d %b %Y")
-CreditCardDF$Datum <- format(CreditCardDF$Datum, "%d-%m-%Y")
-CreditCardDF$Rentedatum <- gsub("mrt", 'mar', CreditCardDF$Rentedatum)
-CreditCardDF$Rentedatum <- gsub("mei", 'may', CreditCardDF$Rentedatum)
-CreditCardDF$Rentedatum <- gsub("okt", 'oct', CreditCardDF$Rentedatum)
-CreditCardDF$Rentedatum <- as.Date(CreditCardDF$Rentedatum, "%d %b %Y")
-CreditCardDF$Rentedatum <- format(CreditCardDF$Rentedatum, "%d-%m-%Y")
+CreditCardDF$Datum <- gsub("mrt|mei|okt", c("mar", "may", "oct"), CreditCardDF$Datum, ignore.case = TRUE)
+CreditCardDF$Datum <- format(as.Date(CreditCardDF$Datum, "%d %b %Y"), "%d-%m-%Y")
+
+CreditCardDF$Rentedatum <- gsub("mrt|mei|okt", c("mar", "may", "oct"), CreditCardDF$Rentedatum, ignore.case = TRUE)
+CreditCardDF$Rentedatum <- format(as.Date(CreditCardDF$Rentedatum, "%d %b %Y"), "%d-%m-%Y")
+
 # some magic to change the year of transaction that were in previous year compared to Date of statement since line do not have year indication
+pyear<-as.character(as.numeric(year)-1)   # previous year to handle transaction around year end
+nyear<-as.character(as.numeric(year)+1)   # next year to handle transaction around year end
 if (as.numeric(maand)<=2) {
   CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)])
   CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)])
@@ -392,20 +420,20 @@ write.table(address, file = "address.txt", append = TRUE,
             row.names = FALSE, col.names = FALSE)
 source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R") # print summary
 # compositie regular expression
-#(?:^           # beginning of string
-#     \d{1,3}      # one, two, or three digits
+# (?:^              # beginning of string
+#     \d{1,3}       # one, two, or three digits
 #   (?:
-#       \.?        # optional separating period
-#       \d{3}      # followed by exactly three digits
-#   )*           # repeat this subpattern (.###) any number of times (including none at all)
-#     (?:,\d{2})?  # optionally followed by a decimal comma and exactly two digits
-#     $)             # End of string.
-# |              # ...or...
-#   (?:^           # beginning of string
+#       \.?         # optional separating period
+#       \d{3}       # followed by exactly three digits
+#   )*              # repeat this subpattern (.###) any number of times (including none at all)
+#     (?:,\d{2})?   # optionally followed by a decimal comma and exactly two digits
+#     $)            # End of string.
+# |                 # ...or...
+#   (?:^            # beginning of string
 #      \d{1,3}      # one, two, or three digits
 #    (?:
 #        ,?         # optional separating comma
 #        \d{3}      # followed by exactly three digits
-#    )*           # repeat this subpattern (,###) any number of times (including none at all)
+#    )*             # repeat this subpattern (,###) any number of times (including none at all)
 #      (?:\.\d{2})? # optionally followed by a decimal perioda and exactly two digits
-#      $)             # End of string.
+#      $)           # End of string.
