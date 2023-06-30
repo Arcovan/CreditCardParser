@@ -3,7 +3,7 @@
 # Current support PFD statement : CC: Master Card and ING Bank: HSBC
 # devtools::install_github("Arcovan/Rstudio")
 # Date : 20 May 2023
-# HSBC is added but more or less separally; many improvements compare to my first step in R
+# HSBC is added but more or less separably; many improvements compare to my first step in R
 
 library(pdftools)
 options(OutDec = ".")     #set decimal point to "."
@@ -157,7 +157,6 @@ colnames(mCreditCard) <-
     "Naam tegenrekening",
     "Omschrijving"
   )
-CCRaw
 if (DocType=="ICS") {
   # ------ New style ------------------
   # Extra all amount for line with 'Af' in the staement Line
@@ -182,13 +181,12 @@ if (DocType=="ICS") {
   YukiDF$Omschrijving<-gsub("Af|Bij", "", YukiDF$Omschrijving)
   YukiDF$Omschrijving<-gsub("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", "", YukiDF$Omschrijving)
   
-  trimws(StatementDF$Omschrijving)
+  # trimws(StatementDF$Omschrijving)
   # regmatches(StatementDF$Omschrijving, regexpr("\\d{2}\\s[a-z]{3}\\s\\d{2}",StatementDF$Omschrijving))
 } # New Style using DF (unfinished)
 
 mCreditCard[, "Omschrijving"] <- CCRaw     # assign vector to column in matrix to start splitting to columns
 #create seperate Data Frame since amount is different datatype and does not match matrix
-View(mCreditCard)
 BedragDF <- data.frame(Bedrag = numeric(length = NROF_RawLines)) # seperate since a matrix cannot contain both char and numeric 
 message("Start split ",DocType, "-raw text in 8 columns and: ", NROF_RawLines, " raw lines.\n")
 # extract dates and amount from statement lines
@@ -353,7 +351,7 @@ if (DocType=="HSBC") {
     row.names = FALSE,
     col.names = ColumnNames
   )
-  Stop("einde")
+  stop("einde")
 }
 
 CreditCardDF <- as.data.frame(mCreditCard)
@@ -385,10 +383,13 @@ if (DocType=="ING") {
   if (Line>0) {CreditCardDF$Bedrag[Line]<-(-CreditCardDF$Bedrag[Line])} # Positive amount is direct debet of previous account
 }
 # prepare for date conversion
-CreditCardDF$Datum <- gsub("mrt|mei|okt", c("mar", "may", "oct"), CreditCardDF$Datum, ignore.case = TRUE)
+CreditCardDF$Datum <- gsub("mrt", "mar", CreditCardDF$Datum, ignore.case = TRUE)
+CreditCardDF$Datum <- gsub("mei", "may", CreditCardDF$Datum, ignore.case = TRUE)
+CreditCardDF$Datum <- gsub("okt", "oct", CreditCardDF$Datum, ignore.case = TRUE)
 CreditCardDF$Datum <- format(as.Date(CreditCardDF$Datum, "%d %b %Y"), "%d-%m-%Y")
-
-CreditCardDF$Rentedatum <- gsub("mrt|mei|okt", c("mar", "may", "oct"), CreditCardDF$Rentedatum, ignore.case = TRUE)
+CreditCardDF$Rentedatum <- gsub("mrt", "mar", CreditCardDF$Rentedatum, ignore.case = TRUE)
+CreditCardDF$Rentedatum <- gsub("mei", "may", CreditCardDF$Rentedatum, ignore.case = TRUE)
+CreditCardDF$Rentedatum <- gsub("okt", "oct", CreditCardDF$Rentedatum, ignore.case = TRUE)
 CreditCardDF$Rentedatum <- format(as.Date(CreditCardDF$Rentedatum, "%d %b %Y"), "%d-%m-%Y")
 
 # some magic to change the year of transaction that were in previous year compared to Date of statement since line do not have year indication
