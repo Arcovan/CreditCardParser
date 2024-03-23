@@ -4,8 +4,9 @@
 #       CC: MasterCard and ING 
 #       Bank: HSBC
 # devtools::install_github("Arcovan/Rstudio")
-# Date : 18 jul 2023
+# Date : 23 mar 2024 : bugs fixed in Mastercard traditional
 # HSBC is added but more or less separably; many improvements compare to my first step in R
+# new style in type ICS amount are incorrect: currency amount is assigned iso base amount
 
 library(pdftools)
 options(OutDec = ".")     #set decimal point to "."
@@ -172,6 +173,16 @@ if (DocType=="ICS") {
   # Use StatementDF as input iso mCreditCard to fill YukiDF iso CreditCardDF
   # Extra all amount for line with 'Af' in the statement Line
   # ---- add ccnr to statement lines -------
+  NR_StatementLines<-length(grep("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", CCRaw)) # "dd aaa dd aaa" from the beginning f the line
+  YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
+                       Valuta = character(length = NR_StatementLines),
+                       Afschrift = integer(length = NR_StatementLines),
+                       Datum = character(length = NR_StatementLines),
+                       Rentedatum = character(length = NR_StatementLines),
+                       Tegenrekening = character(length = NR_StatementLines),
+                       Naam_tegenrekening = character(length = NR_StatementLines),
+                       Omschrijving = character(length = NR_StatementLines),
+                       Bedrag = numeric(NR_StatementLines))
   if (length(CCnr)==1){
     message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
     YukiDF$Omschrijving<-paste(CCnr[1]," : ", YukiDF$Omschrijving) # add 4 digit cardnumber to description
@@ -184,17 +195,6 @@ if (DocType=="ICS") {
       StatementDF$CCnr [(Card4DigitsLineNR[2]+1):(NROF_RawLines)] <-CCnr[2] #add 4 digits cc to description
     }
   } # Add credit card 4 digit number to lines
-  
-  NR_StatementLines<-length(grep("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", CCRaw)) # "dd aaa dd aaa" from the beginning f the line
-  YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
-                       Valuta = character(length = NR_StatementLines),
-                       Afschrift = integer(length = NR_StatementLines),
-                       Datum = character(length = NR_StatementLines),
-                       Rentedatum = character(length = NR_StatementLines),
-                       Tegenrekening = character(length = NR_StatementLines),
-                       Naam_tegenrekening = character(length = NR_StatementLines),
-                       Omschrijving = character(length = NR_StatementLines),
-                       Bedrag = numeric(NR_StatementLines))
   
   YukiDF$Omschrijving<- StatementDF$Omschrijving[grepl("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", StatementDF$Omschrijving)] # "dd aaa dd aaa" from the beginning f the line
   YukiDF$Omschrijving<-gsub("\\*","",YukiDF$Omschrijving) # Delete chgaracter "*"
@@ -219,12 +219,17 @@ if (DocType=="ICS") {
   YukiDF$Rentedatum <- gsub("okt", "oct", YukiDF$Rentedatum, ignore.case = TRUE)
   YukiDF$Rentedatum <- format(as.Date(YukiDF$Rentedatum, "%d %b %Y"), "%d-%m-%Y")
   #---- Extract and assign Amount in home currency -----
+  # StatementDF$Bedrag is not realy used (yet)
+  # regexpr should search first amount at end of line
   LineAmount<-regmatches(StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], perl = TRUE))
   LineAmount<-ConvertAmount(LineAmount)
   StatementDF$Bedrag[grep("Af", StatementDF$Omschrijving)]<--LineAmount
+  # "\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b"    NEW
+  # "(\\d{1,3}(\\.?\\d{3})*(,\\d{2})?$)|(^\\d{1,3}(,?\\d{3})*(\\.\\d{2})?$)" OLD (working)
   LineAmount<-regmatches(StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], perl = TRUE))
   LineAmount<-ConvertAmount(LineAmount)
   StatementDF$Bedrag[grep("Bij", StatementDF$Omschrijving)]<-LineAmount
+  
   YukiDF$Bedrag <- ConvertAmount(regmatches(YukiDF$Omschrijving, regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", YukiDF$Omschrijving)))
   YukiDF$Bedrag[grep("Af", YukiDF$Omschrijving)]<--YukiDF$Bedrag[grep("Af", YukiDF$Omschrijving)]
   # Amounts need to be investigated does not look stable currency amount should be excluded (use "Af" or "Bij")
@@ -274,7 +279,7 @@ if (DocType=="ICS") {
   }
   if (length(CCnr)==1){
     message("Card: ",CCnr[1],"/",Card4DigitsLineNR[1],"/","/TOT:",NROF_RawLines)
-    mCreditCard[(Card4DigitsLineNR[1]+2):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]) #add 4 digits cc to description
+    mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]<-paste(CCnr[1],":",mCreditCard[(Card4DigitsLineNR[1]+1):(NROF_RawLines),"Omschrijving"]) #add 4 digits cc to description
   } else {
     if (length(CCnr)>1){
       message("Cards: ",CCnr[1],"/Van:",Card4DigitsLineNR[1]+1," TOT:",Card4DigitsLineNR[2]-1)
@@ -449,7 +454,7 @@ if (as.numeric(maand)>=11) {
   CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)]<-sub(year, nyear,CreditCardDF$Datum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Datum,"%m")))>1)])
   CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)]<-sub(year, pyear,CreditCardDF$Rentedatum[which(abs(as.numeric(maand)-as.numeric(strftime(CreditCardDF$Rentedatum,"%m")))>1)])
 } # unlikely to have transactions later then statement date but just in case
-# end magic
+# end magic ----
 View(CreditCardDF)
 summary(CreditCardDF$Bedrag)
 #write.csv2(CreditCardDF, file = ofile, row.names = FALSE)         # Delimeter ; no row numbers
