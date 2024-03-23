@@ -174,9 +174,10 @@ if (DocType=="ICS") {
   # Extra all amount for line with 'Af' in the statement Line
   # ---- add ccnr to statement lines -------
   NR_StatementLines<-length(grep("^\\b\\d{2} [a-z]{3} \\d{2} [a-z]{3}\\b", CCRaw)) # "dd aaa dd aaa" from the beginning f the line
+  cat("Aantal Lines:",NR_StatementLines, "\n")
   YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
                        Valuta = character(length = NR_StatementLines),
-                       Afschrift = integer(length = NR_StatementLines),
+                       Afschrift = character(length = NR_StatementLines),
                        Datum = character(length = NR_StatementLines),
                        Rentedatum = character(length = NR_StatementLines),
                        Tegenrekening = character(length = NR_StatementLines),
@@ -221,18 +222,21 @@ if (DocType=="ICS") {
   #---- Extract and assign Amount in home currency -----
   # StatementDF$Bedrag is not realy used (yet)
   # regexpr should search first amount at end of line
-  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], perl = TRUE))
+  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], regexpr("\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?(?= Af)", StatementDF$Omschrijving[grep("Af", StatementDF$Omschrijving)], perl = TRUE))
   LineAmount<-ConvertAmount(LineAmount)
   StatementDF$Bedrag[grep("Af", StatementDF$Omschrijving)]<--LineAmount
-  # "\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b"    NEW
-  # "(\\d{1,3}(\\.?\\d{3})*(,\\d{2})?$)|(^\\d{1,3}(,?\\d{3})*(\\.\\d{2})?$)" OLD (working)
-  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], perl = TRUE))
+
+  LineAmount<-regmatches(YukiDF$Omschrijving[grep("Af", YukiDF$Omschrijving)], regexpr("\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?(?= Af)", YukiDF$Omschrijving[grep("Af", YukiDF$Omschrijving)], perl = TRUE))
+  LineAmount<-ConvertAmount(LineAmount)
+  YukiDF$Bedrag[grep("Af", YukiDF$Omschrijving)]<--LineAmount
+  
+  LineAmount<-regmatches(StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], regexpr("\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?(?= Bij)", StatementDF$Omschrijving[grep("Bij", StatementDF$Omschrijving)], perl = TRUE))
   LineAmount<-ConvertAmount(LineAmount)
   StatementDF$Bedrag[grep("Bij", StatementDF$Omschrijving)]<-LineAmount
   
-  YukiDF$Bedrag <- ConvertAmount(regmatches(YukiDF$Omschrijving, regexpr("\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b", YukiDF$Omschrijving)))
-  YukiDF$Bedrag[grep("Af", YukiDF$Omschrijving)]<--YukiDF$Bedrag[grep("Af", YukiDF$Omschrijving)]
-  # Amounts need to be investigated does not look stable currency amount should be excluded (use "Af" or "Bij")
+  LineAmount<-regmatches(YukiDF$Omschrijving[grep("Bij", YukiDF$Omschrijving)], regexpr("\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?(?= Bij)", YukiDF$Omschrijving[grep("Bij", YukiDF$Omschrijving)], perl = TRUE))
+  LineAmount<-ConvertAmount(LineAmount)
+  YukiDF$Bedrag[grep("Bij", YukiDF$Omschrijving)]<-LineAmount
   #----
   YukiDF$Omschrijving<-gsub("Af|Bij", "", YukiDF$Omschrijving)
 
@@ -349,7 +353,7 @@ if (DocType=="HSBC") {
   
   YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
                        Valuta = character(length = NR_StatementLines),
-                       Afschrift = integer(length = NR_StatementLines),
+                       Afschrift = character(length = NR_StatementLines),
                        Datum = character(length = NR_StatementLines),
                        Rentedatum = character(length = NR_StatementLines),
                        Tegenrekening = character(length = NR_StatementLines),
@@ -470,22 +474,4 @@ write.table(
 address<-as.data.frame(CreditCardDF$`Naam tegenrekening`)
 write.table(address, file = "address.txt", append = TRUE,
             row.names = FALSE, col.names = FALSE)
-source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R") # print summary
-# compositie regular expression ----
-# (?:^              # beginning of string
-#     \d{1,3}       # one, two, or three digits
-#   (?:
-#       \.?         # optional separating period
-#       \d{3}       # followed by exactly three digits
-#   )*              # repeat this subpattern (.###) any number of times (including none at all)
-#     (?:,\d{2})?   # optionally followed by a decimal comma and exactly two digits
-#     $)            # End of string.
-# |                 # ...or...
-#   (?:^            # beginning of string
-#      \d{1,3}      # one, two, or three digits
-#    (?:
-#        ,?         # optional separating comma
-#        \d{3}      # followed by exactly three digits
-#    )*             # repeat this subpattern (,###) any number of times (including none at all)
-#      (?:\.\d{2})? # optionally followed by a decimal perioda and exactly two digits
-#      $)           # End of string.
+#source("/Users/arco/Dropbox/R-Studio/MasterCardPDF/InformUser.R") # print summary
