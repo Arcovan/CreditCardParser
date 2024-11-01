@@ -6,9 +6,12 @@
 # devtools::install_github("Arcovan/Rstudio")
 # Date : 23 mar 2024 : bugs fixed in Mastercard traditional
 # HSBC is added but more or less separably; many improvements compare to my first step in R
-# new style in type ICS amount are incorrect: currency amount is assigned iso base amount
+# TODO: New stype now only need small changes in names and in text "GEINCASEERD VORIG SALDO"
+# date 1 nov 24 TODO finish CCF: proper end 
 
 library(pdftools)
+library(stringr)
+# install.packages("lubridate")
 options(OutDec = ".")     #set decimal point to "."
 options(digits.secs = 2, digits = 10)
 # ===== Define Functions --------------------------------------------------
@@ -21,10 +24,11 @@ ConvertAmount <- function(x) {
 } # since txt string has format "##.###,##"
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
-  ProfileTXT<-c("Mastercard|International Card Services BV","Statement ING Corporate Card","www.business.hsbc.fr")
+  ProfileTXT<-c("Mastercard|International Card Services BV","Statement ING Corporate Card","www.business.hsbc.fr","Votre Agence CCF")
   if (length(grep(ProfileTXT[1], x[1]))!=0) { DocType<-"ICS"}
   if (length(grep(ProfileTXT[2], x[1]))!=0) { DocType<-"ING"}
   if (length(grep(ProfileTXT[3], x[4]))!=0) { DocType<-"HSBC"}
+  if (length(grep(ProfileTXT[4], x[4]))!=0) { DocType<-"CCF"}
   return(list(DocType = DocType, ProfileTXT = ProfileTXT))
 }
 Subtype <- function(x) {
@@ -64,14 +68,15 @@ message("Number of lines read: ", NROF_RawLines, " from " , length(PDFRaw) , " p
 result<-CheckDocType(CCRaw)  #doctype means which credit card supplier / multiple variables returned 
                             # DocType = DocType, ProfileTXT = ProfileTXT)
 DocType<-result$DocType
-message("Docuement type recognized: ",DocType)
+message("Document type recognized: ",DocType)
 if (DocType=="UNKNOWN"){
   message("Either one of the Following keywords were not found:\n")
   m<-c(1:length(result$ProfileTXT))  #defined in function CheckDoctype
   for (i in m) {
     message("\"",result$ProfileTXT[i],"\"") 
   }
-  stop("Documenttype is not recognised. (No ING and no ICS and no HSBC bank)")
+  cat("Documenttype is not recognised. (No ING, ICS, HSBC or CCF bank)\n")
+  stop("STOP")
 } # Stop
 # read generic header info from CCRaw ----
 if (DocType=="ING") { 
@@ -129,7 +134,7 @@ if (DocType=="HSBC") {
   ofile <- gsub("OGRT.*\\.PDF", "X.PDF", ofile, ignore.case = TRUE) # strip generic code from name
   # Extract Date Document and other document header info 
   DateLineNR<-grep("SOLDE DE FIN DE PERIODE", CCRaw)
-  DatumAfschrift <-regmatches(CCRaw[DateLineNR], regexpr("\\d{2}\\.\\d{2}\\.\\d{4}",CCRaw[DateLineNR]))   # Extract date from string
+  DatumAfschrift <-regmatches(CCRaw[DateLineNR], regexpr("\\d{2}\\.\\d{2}\\.\\d{4}",CCRaw[DateLineNR]))   # Extract date from string for Afschriftnummer
   DatumAfschrift <-as.Date(DatumAfschrift,"%d.%m.%Y") 
   maand<-format(DatumAfschrift,"%m")
   year<-format(DatumAfschrift,"%Y") #probably not used
@@ -141,6 +146,31 @@ if (DocType=="HSBC") {
   IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("(?<=IBAN )[A-Z]{2}[0-9]{2}(?: [0-9]{4}){5} [0-9]{3}", CCRaw[IBANLineNR], perl=TRUE))
   message("Account:", IBAN, " DatumAfschrift: ", DatumAfschrift," Afschrift: ", Afschriftnr)
 
+}#Extract Date Document and other document header info 
+if (DocType=="CCF") {
+  # modify output file name
+  ofile <- sub("RLV", "CCF", ifile, ignore.case = TRUE) # Adjust name to identify CreditCard in Name 
+  ofile <- gsub("____.PDF", ".PDF", ofile, ignore.case = TRUE) # strip generic code from name
+  # Extract Date Document and other document header info 
+  DateLineNR<-grep("Arrêté au", CCRaw) #Date statement for creating statement number
+  sapply(strsplit(CCRaw[DateLineNR], " "), function(x) paste(x[3], x[4], x[5],sep = " "))
+  datum_fr<-regmatches(CCRaw[DateLineNR], regexpr("\\d{2}\\s\\w+\\s\\d{4}",CCRaw[DateLineNR])) 
+  maanden <- data.frame(
+    Frans = c("janvier", "février", "mars", "avril", "mai", "juin",
+              "juillet", "août", "septembre", "octobre", "novembre", "décembre"),
+    Engels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+  )
+  datum_en<-str_replace_all(datum_fr, setNames(maanden$Engels, maanden$Frans))  # Vervang de Franse maandnaam door de Engelse
+  DatumAfschrift<-as.Date(datum_en,format = "%d %b %Y")
+  maand<-format(DatumAfschrift,"%m")
+  year<-format(DatumAfschrift,"%Y") #probably not used
+  Afschriftnr <- paste(year, maand, sep = "") # 202304 example
+  IBANLineNR<-grep("IBAN", CCRaw)
+  CCRaw[IBANLineNR]
+  IBAN <- regmatches(CCRaw[IBANLineNR], regexpr("(?<=IBAN )[A-Z]{2}[0-9]{2}(?: [0-9]{4}){5} [0-9]{3}", CCRaw[IBANLineNR], perl=TRUE))
+  message("Account:", IBAN, " Datum Afschrift: ", DatumAfschrift," Afschrift: ", Afschriftnr)
+  
 }#Extract Date Document and other document header info 
 
 ofile <- sub("\\.pdf","-YukiR.csv", ofile, ignore.case = TRUE) # output file same name but different extension 
@@ -409,6 +439,100 @@ if (DocType=="HSBC") {
   )
   stop("Einde HSBC. Harde stop omdat deze er even snel bij geplakt is.")
 } # Parse bankstatement HSBC output YukiDF and writing csv file [STOP]
+if (DocType=="CCF") {
+  pattern <- "^\\d{2}\\/\\d{2}" # "dd/mm" from the beginning of the line
+  # Find rows matching the pattern
+  statementlines <- grep(pattern, StatementDF$Omschrijving) # based on date we know it is a statement line
+  StatementDF$Omschrijving[statementlines]
+  NR_StatementLines <- length(statementlines)
+  # Extract the amount using regular expressions
+  LineAmount <- regmatches(StatementDF$Omschrijving[statementlines], regexpr("\\b[0-9]{1,3}(?:\\s[0-9]{3})*(?:,[0-9]{2})\\b$", StatementDF$Omschrijving[statementlines], perl = TRUE))
+  LineAmount <- gsub("\\s", ".",LineAmount)
+  LineAmount <- ConvertAmount(LineAmount)  # 2 amount too many and no distinction between debet and credit.
+  statementlines
+  # Initialize an empty vector to store the concatenated descriptions
+  concatenated_descriptions <- character(length(statementlines))
+  for (i in 1:(length(statementlines) - 1)) {
+    start_row <- statementlines[i]
+    end_row <- statementlines[i + 1] - 1
+    concatenated_description <- paste(StatementDF$Omschrijving[start_row:end_row], collapse = " ")
+    concatenated_descriptions[i] <- concatenated_description
+  }
+  i<-i+1
+  start_row <- statementlines[i]
+  end_row <- grep("TOTAL DES OPÉRATIONS DU RELEVÉ ",StatementDF$Omschrijving)-1
+  paste(StatementDF$Omschrijving[start_row:end_row], collapse = " ")
+  concatenated_description <- paste(StatementDF$Omschrijving[start_row:end_row], collapse = " ")
+  concatenated_descriptions[i] <- concatenated_description
+  
+  YukiDF <- data.frame(IBAN = character(length = NR_StatementLines),
+                       Valuta = character(length = NR_StatementLines),
+                       Afschrift = character(length = NR_StatementLines),
+                       Datum = character(length = NR_StatementLines),
+                       Rentedatum = character(length = NR_StatementLines),
+                       Tegenrekening = character(length = NR_StatementLines),
+                       Naam_tegenrekening = character(length = NR_StatementLines),
+                       Omschrijving = character(length = NR_StatementLines),
+                       Bedrag = numeric(NR_StatementLines))
+  
+  YukiDF$Omschrijving<-concatenated_descriptions
+  YukiDF$Bedrag<--LineAmount
+  YukiDF$IBAN<-gsub("\\s","",IBAN)
+  YukiDF$Valuta<-"EUR"
+  YukiDF$Afschrift<-Afschriftnr
+  DatumT<-sapply(strsplit(YukiDF$Omschrijving, " "), function(x) paste(x[1]))
+  DatumT<-gsub("\\/", "-" , DatumT)
+  DatumT<-paste(DatumT,year,sep = "-")
+  DatumR<-sapply(strsplit(YukiDF$Omschrijving, " "), function(x) paste(x[2]))
+  DatumR<-gsub("\\/", "-" , DatumR)
+  DatumR
+  DatumT
+  year
+  YukiDF$Datum      <- format(as.Date(DatumT, "%d-%m-%Y"),format = "%d-%m-%Y")
+  YukiDF$Rentedatum <- format(as.Date(DatumR, "%d-%m-%Y"),format = "%d-%m-%Y")
+  YukiDF$Omschrijving <-gsub("\\d{2}\\.\\d{2}\\s", "", YukiDF$Omschrijving) # now we have extracted the dates they can be removed
+  pattern <- "\\b[0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})\\b"
+  YukiDF$Omschrijving<-gsub(pattern, "", YukiDF$Omschrijving) # also remove amounts from description
+  YukiDF$Omschrijving <-gsub('\\"', "", YukiDF$Omschrijving)
+  pattern <- "^\\d{2}\\/\\d{2}" # "dd/mm" from the beginning of the line
+  YukiDF$Omschrijving<-gsub(pattern, "", YukiDF$Omschrijving)
+  pattern <- "\\d{2}\\/\\d{2}\\/\\d{4}" # "dd/mm/yyyy" from the beginning of the line
+  YukiDF$Omschrijving<-gsub(pattern, "", YukiDF$Omschrijving)
+  
+  YukiDF$Bedrag[grep("VIR INST", YukiDF$Omschrijving)]<--YukiDF$Bedrag[grep("VIR INST", YukiDF$Omschrijving)]
+  
+# parse names
+  #pattern <- "\\b[a-zA-Z]{5,}\\b" # first word of minimum 5 non digits
+  pattern <- "PRLV SEPA "
+  matches <- regmatches(YukiDF$Omschrijving, regexpr(pattern, YukiDF$Omschrijving))
+  YukiDF$Naam_tegenrekening[grep(pattern,YukiDF$Omschrijving)]<-matches
+  matching_indices <- grep(pattern, YukiDF$Omschrijving)
+  YukiDF$Naam_tegenrekening[matching_indices] <-sapply(strsplit(YukiDF$Omschrijving[matching_indices], " "), function(x) paste(x[5]))
+  #
+  View(YukiDF)
+  ColumnNames <-
+    c(
+      "IBAN",
+      "Valuta",
+      "Afschrift",
+      "Datum",
+      "Rentedatum",
+      "Tegenrekening",
+      "Naam tegenrekening",
+      "Omschrijving",
+      "Bedrag"
+    )
+  write.table(
+    YukiDF,
+    file = ofile,
+    quote = FALSE,
+    sep = ";",
+    dec = ".",
+    row.names = FALSE,
+    col.names = ColumnNames
+  )
+  stop("Einde CCF Harde stop omdat deze er even snel bij geplakt is.")
+} # Parse bankstatement CCF output YukiDF and writing csv file
 
 CreditCardDF <- as.data.frame(mCreditCard)
 CreditCardDF <- cbind.data.frame(CreditCardDF, BedragDF)
@@ -460,6 +584,7 @@ if (as.numeric(maand)>=11) {
 } # unlikely to have transactions later then statement date but just in case
 # end magic ----
 View(CreditCardDF)
+# is.na(CreditCardDF)
 summary(CreditCardDF$Bedrag)
 #write.csv2(CreditCardDF, file = ofile, row.names = FALSE)         # Delimeter ; no row numbers
 write.table(
