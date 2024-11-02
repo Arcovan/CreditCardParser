@@ -1,0 +1,1 @@
+This R-code converts a readable bankstatement or Creditcard statement in PDF to a CSV file. This CSV file is used to import into an accounting system. In this case the format is based on specs from YUKI. This is a Dutch and Belgium accounting system for SME.
